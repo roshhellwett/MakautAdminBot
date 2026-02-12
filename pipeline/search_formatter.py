@@ -29,3 +29,4 @@ def format_search_ui(notifications):
 
     footer = "\n\n<i>Supreme system monitoring 24/7.</i>"
     return header + "\n\n".join(items) + footer
+    #@academictelebotbyroshhellwett

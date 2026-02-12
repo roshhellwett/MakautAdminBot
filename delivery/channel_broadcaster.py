@@ -48,3 +48,4 @@ async def broadcast_channel(messages):
 
     if sent_count > 0:
         logger.info(f"📢 BATCH COMPLETE: {sent_count} notices broadcasted.")
+        #@academictelebotbyroshhellwett

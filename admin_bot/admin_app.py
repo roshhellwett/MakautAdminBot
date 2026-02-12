@@ -28,3 +28,4 @@ async def start_admin_bot():
     
     # CRITICAL FIX: Keep this coroutine alive forever so the task doesn't finish
     await asyncio.Event().wait()
+    #@academictelebotbyroshhellwett

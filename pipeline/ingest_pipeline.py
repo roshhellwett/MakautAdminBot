@@ -38,3 +38,4 @@ async def start_pipeline():
         # Dynamic Heartbeat
         elapsed = asyncio.get_event_loop().time() - cycle_start
         await asyncio.sleep(max(10, SCRAPE_INTERVAL - elapsed))
+        #@academictelebotbyroshhellwett

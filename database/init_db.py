@@ -21,3 +21,4 @@ async def init_db():
     except Exception as e:
         logger.error(f"Failed to initialize databases: {e}")
         raise e
+        #@academictelebotbyroshhellwett

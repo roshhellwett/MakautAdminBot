@@ -83,3 +83,4 @@ async def get_date_from_pdf(pdf_url):
     except Exception as e:
         logger.error(f"🛑 PDF Acquisition Critical Error: {e} | URL: {pdf_url}")
         return None
+        #@academictelebotbyroshhellwett

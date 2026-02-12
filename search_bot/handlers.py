@@ -40,3 +40,4 @@ async def search_by_keyword(query: str, limit: int = 10):
     except Exception as e:
         logger.error(f"Handler Error (Search - {query}): {e}")
         return "❌ <b>System Error:</b> Search service is temporarily unavailable."
+        #@academictelebotbyroshhellwett

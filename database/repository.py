@@ -62,3 +62,4 @@ class SecurityRepo:
         """Count users with active strikes."""
         async with SecuritySessionLocal() as db:
             return (await db.execute(select(func.count(UserStrike.user_id)))).scalar()
+            #@academictelebotbyroshhellwett

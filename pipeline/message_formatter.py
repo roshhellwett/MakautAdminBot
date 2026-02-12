@@ -30,3 +30,4 @@ def format_message(item):
         f"<b>{title}</b>\n\n"
         f"<a href='{url}'>{link_text}</a>"
     )
+    #@academictelebotbyroshhellwett

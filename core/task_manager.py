@@ -36,3 +36,4 @@ async def supervised_task(name, coro_func):
             logger.error(f"❌ {name} CRITICAL FAILURE: {e}. Restarting in {retry_delay}s...")
             await asyncio.sleep(retry_delay)
             retry_delay = min(retry_delay * 2, 120)
+            #@academictelebotbyroshhellwett

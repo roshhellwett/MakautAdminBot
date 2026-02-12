@@ -33,3 +33,4 @@ KEYWORDS = {
 
 # UI Strings for Search Bot
 SEARCH_FILTERS = [["/latest", "BCA", "CSE"], ["Exam", "Result", "Form"]]
+#@academictelebotbyroshhellwett

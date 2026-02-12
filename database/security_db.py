@@ -25,3 +25,4 @@ SecuritySessionLocal = sessionmaker(
 
 SecurityBase = declarative_base()
 logger.info("SECURITY DATABASE ENGINE READY (Isolated Storage: security.db)")
+#@academictelebotbyroshhellwett

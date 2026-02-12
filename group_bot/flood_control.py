@@ -49,3 +49,4 @@ def is_flooding(user_id: int, message_text: str) -> (bool, str):
         return True, "Identical query detected. Use different keywords."
 
     return False, None
+    #@academictelebotbyroshhellwett

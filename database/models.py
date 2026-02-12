@@ -18,4 +18,5 @@ class SystemFlag(Base):
     key = Column(String(100), unique=True, index=True, nullable=False)
     value = Column(String(100), nullable=True)
 
+#@academictelebotbyroshhellwett
 # REMOVED: UserStrike (Moved to security_models.py for isolation)

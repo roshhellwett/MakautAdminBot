@@ -7,3 +7,4 @@ class UserStrike(SecurityBase):
     user_id = Column(Integer, primary_key=True, index=True)
     strike_count = Column(Integer, default=0)
     last_violation = Column(DateTime, nullable=True)
+    #@academictelebotbyroshhellwett

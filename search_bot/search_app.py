@@ -70,3 +70,4 @@ async def start_search_bot():
     
     # CRITICAL FIX: Keep this coroutine alive forever so the task doesn't finish
     await asyncio.Event().wait()
+    #@academictelebotbyroshhellwett

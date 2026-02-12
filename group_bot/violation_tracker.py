@@ -39,3 +39,4 @@ async def add_strike(user_id: int) -> bool:
         except Exception as e:
             logger.error(f"Security DB strike update failed: {e}")
             return False
+            #@academictelebotbyroshhellwett

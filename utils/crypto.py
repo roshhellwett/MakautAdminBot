@@ -7,3 +7,4 @@ def generate_notice_hash(title: str, url: str) -> str:
     """
     raw = f"{title.strip().lower()}|{url.strip().lower()}"
     return hashlib.sha256(raw.encode()).hexdigest()
+    #@academictelebotbyroshhellwett
