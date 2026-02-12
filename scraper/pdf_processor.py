@@ -1,72 +1,46 @@
-import os
-import time
-import random
-import requests
 import logging
-from google import genai
-from google.genai import types
+import pdfplumber
+import requests
+import io
+from scraper.date_extractor import extract_date
 
 logger = logging.getLogger("PDF_PROCESSOR")
 
-# --- ROBUST SEQUENTIAL MANAGER ---
-RAW_KEYS = os.getenv("GEMINI_API_KEY", "")
-ALL_KEYS = [k.strip() for k in RAW_KEYS.split(",") if k.strip()]
-
-current_key_index = 0
-BLACKLISTED_KEYS = {} # {key: timestamp}
-
 def get_date_from_pdf(pdf_url):
-    global current_key_index, BLACKLISTED_KEYS
+    """
+    FREE EXTRACTION ONLY:
+    Strictly searches for 2026 dates in Metadata and Local Text.
+    """
+    try:
+        # Download PDF into memory
+        response = requests.get(pdf_url, timeout=15, verify=False)
+        if response.status_code != 200: 
+            return None
+        pdf_bytes = io.BytesIO(response.content)
+
+        with pdfplumber.open(pdf_bytes) as pdf:
+            # --- STEP 1: METADATA CHECK (FREE) ---
+            meta_date = pdf.metadata.get('CreationDate')
+            if meta_date and "2026" in meta_date:
+                # Format: D:20260212...
+                raw_str = meta_date[2:10]
+                try:
+                    from datetime import datetime
+                    found_dt = datetime.strptime(raw_str, "%Y%m%d")
+                    return found_dt
+                except: 
+                    pass
+
+            # --- STEP 2: LOCAL TEXT SCAN (FREE) ---
+            # Search only the first 1000 characters for a 2026 date
+            if len(pdf.pages) > 0:
+                first_page_text = pdf.pages[0].extract_text()
+                if first_page_text:
+                    found_date = extract_date(first_page_text[:1000])
+                    if found_date and found_date.year == 2026:
+                        return found_date
+
+    except Exception as e:
+        logger.error(f"❌ PDF Local Scan Error: {e}")
     
-    if not ALL_KEYS:
-        logger.error("❌ No GEMINI_API_KEY found in .env!")
-        return None
-
-    now = time.time()
-    
-    # 1. Clean up old blacklisted keys
-    for key, fail_time in list(BLACKLISTED_KEYS.items()):
-        if now - fail_time > 86400: # 24 Hours
-            del BLACKLISTED_KEYS[key]
-            logger.info(f"♻️ Quota reset for a blacklisted key.")
-
-    # 2. Try to find a working lifeline
-    attempts = 0
-    while attempts < len(ALL_KEYS):
-        active_key = ALL_KEYS[current_key_index]
-        
-        if active_key in BLACKLISTED_KEYS:
-            current_key_index = (current_key_index + 1) % len(ALL_KEYS)
-            attempts += 1
-            continue
-            
-        try:
-            # Fetch PDF
-            response = requests.get(pdf_url, timeout=20, verify=False, 
-                                   headers={"User-Agent": "Mozilla/5.0"})
-            if response.status_code != 200: return None
-            
-            # Anti-Spam Jitter
-            time.sleep(random.uniform(7.0, 10.0)) 
-
-            client = genai.Client(api_key=active_key)
-            ai_response = client.models.generate_content(
-                model="gemini-2.0-flash",
-                contents=[types.Part.from_bytes(data=response.content, mime_type="application/pdf"),
-                          "Extract ONLY notice date DD-MM-YYYY from top-right header."]
-            )
-
-            return ai_response.text.strip()
-
-        except Exception as e:
-            if "429" in str(e) or "quota" in str(e).lower():
-                logger.warning(f"⚠️ Key #{current_key_index + 1} exhausted. Switching to lifeline...")
-                BLACKLISTED_KEYS[active_key] = now
-                current_key_index = (current_key_index + 1) % len(ALL_KEYS)
-                attempts += 1
-            else:
-                logger.error(f"❌ AI Error on Key #{current_key_index + 1}: {e}")
-                return None # Don't rotate for non-quota errors
-                
-    logger.error("🛑 ALL LIFELINES EXHAUSTED.")
     return None

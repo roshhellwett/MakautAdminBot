@@ -32,7 +32,8 @@ except ValueError:
     ADMIN_ID = 0
 
 # ==============================
-# GEMINI API KEYS (Multi-Key)
+# GEMINI API KEY (Single Key Logic)
 # ==============================
-GEMINI_API_KEYS = os.getenv("GEMINI_API_KEY", "") # Reads your comma-separated string
+# Ensure this matches exactly what pdf_processor.py expects to import
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "") 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
