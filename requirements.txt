@@ -7,3 +7,4 @@ python-dotenv
 pdfplumber
 psutil
 aiosqlite
+pip

@@ -22,3 +22,4 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 <i>The bot is checking university portals every few minutes. New notices will be broadcasted automatically.</i>
 """
     await update.message.reply_text(text, parse_mode="HTML")
+    #@academictelebotbyroshhellwett

@@ -57,3 +57,4 @@ async def get_date_from_pdf(pdf_url):
     except Exception as e:
         logger.error(f"PDF Download Error: {pdf_url} | {e}")
         return None
+            #@academictelebotbyroshhellwett

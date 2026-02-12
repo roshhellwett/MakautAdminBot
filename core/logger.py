@@ -19,3 +19,4 @@ def setup_logger():
     # Silence noisy library logs
     logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
+    #@academictelebotbyroshhellwett

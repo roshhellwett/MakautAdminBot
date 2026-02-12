@@ -30,3 +30,4 @@ AsyncSessionLocal = sessionmaker(
 
 Base = declarative_base()
 logger.info(f"DATABASE ENGINE READY (ASYNC MODE: {ASYNC_DB_URL.split('+')[0]})")
+#@academictelebotbyroshhellwett

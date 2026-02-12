@@ -29,3 +29,4 @@ async def add_strike(user_id: int) -> bool:
             return True
             
         return False
+    #@academictelebotbyroshhellwett

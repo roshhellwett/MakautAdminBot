@@ -40,3 +40,4 @@ async def start_telegram():
     logger.info("Main Broadcast Bot READY & POLLING")
 
     return _app
+    #@academictelebotbyroshhellwett

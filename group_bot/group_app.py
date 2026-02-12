@@ -105,3 +105,4 @@ async def start_group_bot():
     await app.start()
     await app.updater.start_polling()
     logger.info("UNIFIED GROUP HUB ONLINE")
+    #@academictelebotbyroshhellwett

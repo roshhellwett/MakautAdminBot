@@ -20,3 +20,4 @@ async def search_by_keyword(query, limit=10):
         result = await db.execute(stmt)
         results = result.scalars().all()
         return format_search_result(results)
+            #@academictelebotbyroshhellwett

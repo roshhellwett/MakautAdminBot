@@ -38,3 +38,4 @@ async def start_search_bot():
     await app.start()
     await app.updater.start_polling()
     logger.info("SEARCH BOT GOD MODE ACTIVE")
+        #@academictelebotbyroshhellwett

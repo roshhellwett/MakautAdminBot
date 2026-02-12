@@ -23,3 +23,4 @@ async def start_admin_bot():
     await app.start()
     await app.updater.start_polling()
     logger.info("ADMIN CONTROL BOT READY & POLLING")
+    #@academictelebotbyroshhellwett

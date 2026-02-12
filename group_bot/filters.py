@@ -33,3 +33,4 @@ async def is_inappropriate(text: str) -> (bool, str):
     if not text:
         return False, None
     return await asyncio.to_thread(_run_regex_sync, text)
+    #@academictelebotbyroshhellwett

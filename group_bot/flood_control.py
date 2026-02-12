@@ -46,3 +46,4 @@ def is_flooding(user_id: int, message_text: str) -> (bool, str):
         return True, "Spamming (Repeated Content)"
 
     return False, None
+    #@academictelebotbyroshhellwett

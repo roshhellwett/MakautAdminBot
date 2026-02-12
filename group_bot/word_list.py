@@ -51,3 +51,4 @@ BANNED_WORDS = [
 SPAM_DOMAINS = [
     "t.me/joinchat", "bit.ly", "goo.gl", "t.co", "whatsapp.com/join"
 ]
+    #@academictelebotbyroshhellwett

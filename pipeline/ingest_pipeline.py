@@ -73,3 +73,4 @@ async def start_pipeline():
         
         logger.info(f"💤 CYCLE COMPLETE IN {int(elapsed)}s. NEXT CYCLE IN {int(sleep_time)}s...")
         await asyncio.sleep(sleep_time)
+            #@academictelebotbyroshhellwett

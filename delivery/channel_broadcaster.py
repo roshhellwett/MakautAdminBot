@@ -57,3 +57,4 @@ async def broadcast_channel(messages):
                 break
 
     logger.info(f"CHANNEL SENT {sent}/{len(messages)}")
+    #@academictelebotbyroshhellwett

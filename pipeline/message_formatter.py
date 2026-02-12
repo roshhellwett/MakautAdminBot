@@ -48,3 +48,4 @@ def format_search_result(notifications):
         date_suffix = f" (<i>{date_str}</i>)" if date_str else ""
         items.append(f"{i}. {icon} <a href='{n.source_url}'>{title}</a>{date_suffix}")
     return header + "\n\n".join(items) + "\n\n<i>Supreme system monitoring 24/7.</i>"
+        #@academictelebotbyroshhellwett

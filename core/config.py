@@ -31,3 +31,4 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
 # SSL Safety: Targeted exemptions for known legacy university certs 
 SSL_VERIFY_EXEMPT = ["makautexam.net", "www.makautexam.net"]
+#@academictelebotbyroshhellwett

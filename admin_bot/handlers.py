@@ -66,3 +66,4 @@ async def health_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "✅ <b>Pipeline:</b> HEARTBEAT STABLE"
     )
     await update.message.reply_text(status_msg, parse_mode='HTML')
+    #@academictelebotbyroshhellwett
