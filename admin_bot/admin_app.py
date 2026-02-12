@@ -1,7 +1,7 @@
 import os
 import logging
 from telegram.ext import ApplicationBuilder, CommandHandler
-from admin_bot.handlers import update_system, send_db_backup, health_check
+from admin_bot.handlers import update_system, send_db_backup, health_check, maintenance_mode
 
 logger = logging.getLogger("ADMIN_BOT")
 
@@ -11,14 +11,14 @@ async def start_admin_bot():
         logger.error("ADMIN_BOT_TOKEN missing in .env!")
         return
 
-    # FIX: Added timeouts for more stable connection during start
+    # Build the application with stable network settings
     app = ApplicationBuilder().token(token).read_timeout(30).connect_timeout(30).build()
     
     # Register management commands
     app.add_handler(CommandHandler("update", update_system))
     app.add_handler(CommandHandler("backup", send_db_backup))
     app.add_handler(CommandHandler("health", health_check))
-    app.add_handler(CommandHandler("maintenance", maintenance_mode))
+    app.add_handler(CommandHandler("maintenance", maintenance_mode)) # Added registration
 
     await app.initialize()
     await app.start()
