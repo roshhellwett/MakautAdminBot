@@ -13,14 +13,11 @@ elif DATABASE_URL.startswith("sqlite://"):
 else:
     ASYNC_DB_URL = DATABASE_URL
 
-# UPGRADE: Optimized for high-concurrency bursts in large groups
+# FIXED: Removed pool_size/max_overflow which are incompatible with SQLite StaticPool
 engine = create_async_engine(
     ASYNC_DB_URL,
     connect_args={"check_same_thread": False},
     poolclass=StaticPool,
-    # High-traffic settings
-    pool_size=20,       
-    max_overflow=10,    
     future=True,
     echo=False
 )
@@ -32,5 +29,5 @@ AsyncSessionLocal = sessionmaker(
 )
 
 Base = declarative_base()
-logger.info(f"DATABASE ENGINE READY (ZENITH CONCURRENCY MODE)")
+logger.info(f"DATABASE ENGINE READY (ASYNC MODE: {ASYNC_DB_URL.split('+')[0]})")
 #@academictelebotbyroshhellwett
