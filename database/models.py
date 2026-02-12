@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, DateTime
 from database.db import Base
 
 class Notification(Base):
@@ -18,10 +18,4 @@ class SystemFlag(Base):
     key = Column(String(100), unique=True, index=True, nullable=False)
     value = Column(String(100), nullable=True)
 
-# NEW: Production-Grade Strike Persistence
-class UserStrike(Base):
-    __tablename__ = "user_strikes"
-    user_id = Column(Integer, primary_key=True, index=True)
-    strike_count = Column(Integer, default=0)
-    last_violation = Column(DateTime, nullable=True)
-    #@academictelebotbyroshhellwett
+# REMOVED: UserStrike (Moved to security_models.py for isolation)

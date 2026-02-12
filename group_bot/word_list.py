@@ -11,8 +11,8 @@ BANNED_WORDS = [
     "arseface", "bugger", "buggeroff", "knob", "knobhead", "bellend", "balls", 
     "ballsack", "ballbag", "scumbag", "scum", "shithead", "shitface", "shitbag", 
     "shitstain", "dipshit", "jackass", "jackhole", "jerkoff", "wankstain", "twat", 
-    "twatface", "twathead", "douche", "doucebag", "slag", "skank", "hoe", "hoebag", 
-    "tramp", "pisshead", "retard", "retarded", "numpty", "wazzock",
+    "twatface", "twathead", "douche", "douchebag", "slag", "skank", "hoe", "hoebag", 
+    "tramp", "pisshead", "retard", "retarded", "numpty", "wazzock", "sex", "sexy", "porn",
 
     # --- [HI] Stage 1 & 2 Hindi / Hinglish (Romanized) ---
     "chutiya", "chutia", "chutiye", "chut", "chutmarika", "gand", "gandu",
@@ -30,11 +30,11 @@ BANNED_WORDS = [
     "tattee", "tatty", "saala", "salasali", "sali", "nalayak", "nikamma", "nalayak kutta",
 
     # --- [HI] Stage 1 & 2 Devanagari ---
-    "चुतिया", "চুতিয়া", "गांडू", "हरामी", "हरामखোর", "भोसड़ीके", "बहनचोদ",
-    "মাদারচোদ", "রাंडी", "সুআর", "কুত্তা", "কুত্তী", "ঊল্লু", "চুদাই", "कमीना", 
+    "चुतिया", "চুতিয়া", "गांडू", "हरामी", "हरामखोर", "भोसड़ीके", "बहनचोद",
+    "मাদারচোদ", "रांडी", "सुअर", "कुत्ता", "कुत्ती", "उल्लू", "चुदाई", "कमीना", 
     "कमीनी", "कमीने", "हरामज़ादा", "हरामज़ादी", "हराम की औलाद", "हरामी के बच्चे", 
-    "सुअर की औলাদ", "कुत्ते की औलाद", "भंड", "भड़वा", "रখৈল", "হিজড়ো", "ছক্কো", 
-    "মীঠো", "কটুআ", "মুল্লা", "তট্টি", "সালা", "সালী", "নালায়ক",
+    "सुअर की औलाद", "कुत्ते की औलाद", "भंड", "भड़वा", "रखैल", "हिजड़ा", "छक्का", 
+    "मीठा", "कटुआ", "मुल्ला", "टट्टी", "साला", "साली", "नालायक",
 
     # --- [BN] Stage 1 & 2 Bengali (Bangla Script) ---
     "চোদা", "চোদাচুদি", "চোদচুদি", "চোদান", "চোদানোর", "চুদাচুদি", "চুদানি",
@@ -51,4 +51,3 @@ BANNED_WORDS = [
 SPAM_DOMAINS = [
     "t.me/joinchat", "bit.ly", "goo.gl", "t.co", "whatsapp.com/join"
 ]
-    #@academictelebotbyroshhellwett

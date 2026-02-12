@@ -1,5 +1,6 @@
 import os
 import logging
+import asyncio
 from telegram.ext import ApplicationBuilder, CommandHandler
 from admin_bot.handlers import update_system, send_db_backup, health_check
 
@@ -22,5 +23,8 @@ async def start_admin_bot():
     await app.initialize()
     await app.start()
     await app.updater.start_polling()
+    
     logger.info("ADMIN CONTROL BOT READY & POLLING")
-     #@academictelebotbyroshhellwett
+    
+    # CRITICAL FIX: Keep this coroutine alive forever so the task doesn't finish
+    await asyncio.Event().wait()

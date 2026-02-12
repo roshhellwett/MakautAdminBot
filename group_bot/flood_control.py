@@ -1,10 +1,11 @@
 import time
 from collections import deque
 
-# Configuration for Supreme Flood Control
-MAX_MESSAGES = 5          # Max messages allowed in the time window
-TIME_WINDOW = 10          # Time window in seconds
-DUPLICATE_LIMIT = 2       # How many times the exact same message can be sent
+# Zenith Production Tuning
+# Specifically balanced for database protection vs user search speed
+MAX_MESSAGES = 4          # Max 4 searches allowed per time window
+TIME_WINDOW = 12          # 12-second window to prevent database query spikes
+DUPLICATE_LIMIT = 1       # Blocks the exact same query twice in a row
 
 # User activity storage: {user_id: [timestamps]}
 user_history = {}
@@ -13,37 +14,38 @@ user_duplicates = {}
 
 def is_flooding(user_id: int, message_text: str) -> (bool, str):
     """
-    Checks if a user is flooding or repeating messages.
+    Forensic analyzer for search and group messaging.
+    Returns (True, reason) if user is spamming, otherwise (False, None).
     """
     now = time.time()
     
-    # --- 1. Flood Detection (Frequency) ---
+    # --- 1. Frequency Analysis (Token Bucket) ---
     if user_id not in user_history:
         user_history[user_id] = deque()
     
     timestamps = user_history[user_id]
     timestamps.append(now)
     
-    # Remove timestamps outside the window
+    # Clear history outside the sliding time window
     while timestamps and timestamps[0] < now - TIME_WINDOW:
         timestamps.popleft()
     
     if len(timestamps) > MAX_MESSAGES:
-        return True, "Spamming (Message Flooding)"
+        return True, "Too many requests. Please wait a few seconds."
 
-    # --- 2. Duplicate Detection (Repetition) ---
+    # --- 2. Content Repetition Analysis ---
     text_clean = message_text.lower().strip()
     if user_id not in user_duplicates:
         user_duplicates[user_id] = {"text": "", "count": 0}
     
+    # Check if this query is identical to the last one
     if user_duplicates[user_id]["text"] == text_clean:
         user_duplicates[user_id]["count"] += 1
     else:
         user_duplicates[user_id]["text"] = text_clean
         user_duplicates[user_id]["count"] = 1
-        
+     
     if user_duplicates[user_id]["count"] > DUPLICATE_LIMIT:
-        return True, "Spamming (Repeated Content)"
+        return True, "Identical query detected. Use different keywords."
 
     return False, None
-    #@academictelebotbyroshhellwett

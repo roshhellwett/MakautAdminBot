@@ -8,37 +8,31 @@ from urllib.parse import urljoin
 
 from utils.hash_util import generate_hash
 from core.sources import URLS
-from core.config import SSL_VERIFY_EXEMPT, TARGET_YEAR
+from core.config import SSL_VERIFY_EXEMPT, TARGET_YEAR, REQUEST_TIMEOUT
 from scraper.date_extractor import extract_date
 from scraper.pdf_processor import get_date_from_pdf
 
 logger = logging.getLogger("SCRAPER")
 
 USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/121.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) Chrome/121.0.0.0 Safari/537.36"
 ]
-
-source_health = {key: 0 for key in URLS.keys()}
-
-def get_source_health():
-    return source_health
 
 async def build_item(title, url, source_name, date_context=None):
     if not title or not url: return None
     
-    BLOCKLIST = ["about us", "contact", "directory", "staff", "home", "back"]
+    # Forensic noise reduction [cite: 33]
+    BLOCKLIST = ["about us", "contact", "home", "back", "gallery"]
     if any(k in title.lower() for k in BLOCKLIST): return None
 
-    # 1. Primary Date Extraction
+    # Multi-stage Date Inference
     real_date = extract_date(title) or (extract_date(date_context) if date_context else None)
     
-    # 2. Forensic PDF Date Extraction
+    # PDF Content Fallback
     if not real_date and ".pdf" in url.lower():
         real_date = await get_date_from_pdf(url)
 
-    # 3. Gatekeeper Logic: Current Year Enforcement
     if real_date and real_date.year == TARGET_YEAR:
         return {
             "title": title.strip(),
@@ -51,38 +45,26 @@ async def build_item(title, url, source_name, date_context=None):
         }
     return None
 
-async def parse_generic_links(base_url, source_name):
-    data = []
+async def scrape_source(source_key, source_config):
     headers = {"User-Agent": random.choice(USER_AGENTS)}
-    verify = not any(domain in base_url for domain in SSL_VERIFY_EXEMPT)
+    verify = not any(domain in source_config["url"] for domain in SSL_VERIFY_EXEMPT)
     
     try:
-        async with httpx.AsyncClient(timeout=30.0, verify=verify) as client:
-            r = await client.get(base_url, headers=headers)
+        await asyncio.sleep(random.uniform(1, 3)) # Stealth Jitter 
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT, verify=verify) as client:
+            r = await client.get(source_config["url"], headers=headers)
             r.raise_for_status()
             soup = BeautifulSoup(r.text, "html.parser")
             
+            # Context-aware scraping
+            items = []
             container = soup.find("div", {"id": "content"}) or soup.find("table") or soup
-            for a in container.find_all("a"):
-                title = a.get_text(" ", strip=True)
-                href = a.get("href")
-                if not title or not href: continue
-                
-                full_url = urljoin(base_url, href)
-                item = await build_item(title, full_url, source_name, a.parent.get_text())
-                if item: data.append(item)
+            for a in container.find_all("a", href=True):
+                full_url = urljoin(source_config["url"], a["href"])
+                item = await build_item(a.get_text(strip=True), full_url, source_config["source"], a.parent.get_text())
+                if item: items.append(item)
+            return items
     except Exception as e:
-        logger.error(f"Scrape Failed: {base_url} | {e}")
-        raise e 
-    return data
-
-async def scrape_source(source_key, source_config):
-    try:
-        await asyncio.sleep(random.uniform(1, 5)) # Stealth Jitter
-        results = await parse_generic_links(source_config["url"], source_config["source"])
-        source_health[source_key] = 0
-        return results
-    except Exception as e:
-        source_health[source_key] += 1
+        logger.error(f"Source Failure {source_key}: {e}")
         return []
             #@academictelebotbyroshhellwett
