@@ -32,14 +32,14 @@ async def start_group_bot():
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         text = (
-            "🎓 <b>MAKAUT Student Hub & Rules</b>\n\n"
+            "🎓 <b>Academic Group & Rules</b>\n\n"
             "<b>Quick Links:</b>\n"
             "1. Check the <b>Channel</b> for real-time alerts.\n"
             "2. Use the <b>Search Bot</b> to find specific documents.\n\n"
             "<b>⚖️ Group Rules:</b>\n"
             "• No abusive language or personal attacks.\n"
             "• No spamming or unauthorized links.\n"
-            "• 3 Strikes = 1 Hour Mute automatically.\n\n"
+            "• MAKAUT UNIVERSITY HAS BEEN INTEGRATED\n\n"
             "<i>Pin this message for easy access!</i>"
         )
         return await context.bot.send_message(chat_id=chat_id, text=text, parse_mode="HTML", reply_markup=reply_markup)
