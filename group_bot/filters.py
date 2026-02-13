@@ -1,42 +1,39 @@
 import re
 import asyncio
 import unicodedata
-from group_bot.word_list import BANNED_WORDS, SPAM_DOMAINS
+from group_bot.word_list import BANNED_WORDS, STRICT_BAD_WORDS, SPAM_DOMAINS
 
-# Pre-compile the pattern to find banned words anywhere in a sentence
-# This matches the word even if surrounded by other text
-# Using \b word boundaries for the first pass to avoid false positives (e.g., "class" vs "ass")
-ABUSE_PATTERN_STRICT = re.compile(r"(?i)\b(" + "|".join(re.escape(word) for word in BANNED_WORDS) + r")\b")
+# 1. Strict Pattern: Matches "ass" but NOT "class"
+# Uses \b (Word Boundary) on both sides
+STRICT_PATTERN = re.compile(r"(?i)\b(" + "|".join(re.escape(w) for w in STRICT_BAD_WORDS) + r")\b")
 
-# Relaxed pattern for hidden/embedded words (no word boundaries)
-ABUSE_PATTERN_RELAXED = re.compile(r"(?i)(" + "|".join(re.escape(word) for word in BANNED_WORDS) + r")")
+# 2. Relaxed Pattern: Matches "dumbass" or "motherfucker"
+# No word boundaries
+RELAXED_PATTERN = re.compile(r"(?i)(" + "|".join(re.escape(w) for w in BANNED_WORDS) + r")")
 
 def _run_regex_sync(text):
-    """Zenith Deep Scan Engine: Captures abuses inside full sentences."""
+    """Zenith Deep Scan Engine: Smart Context-Aware Filtering."""
     if not text:
         return False, None
 
-    # 1. Unicode Normalization (Catches stylized bypass fonts)
+    # Unicode Normalization (Catches stylized bypass fonts)
     normalized_text = unicodedata.normalize("NFKD", text).lower()
     
-    # 2. Direct Sentence Scan (Captures: "sex is good" or "you bitch")
-    # This pass uses word boundaries to catch distinct words clearly
-    if ABUSE_PATTERN_STRICT.search(normalized_text):
+    # PASS 1: Strict Word Scan (Safe)
+    if STRICT_PATTERN.search(normalized_text):
         return True, "Abusive Language Detected"
 
-    # 3. Embedded Word Scan (Captures: "dumbass" or "scumbag")
-    # This checks if a banned word is part of a larger string (e.g. "motherfucker")
-    if ABUSE_PATTERN_RELAXED.search(normalized_text):
+    # PASS 2: Substring Scan (Deep)
+    if RELAXED_PATTERN.search(normalized_text):
         return True, "Abusive Language Detected"
 
-    # 4. Hidden Word Scan (Captures: "s.e.x" or "f u c k")
-    # We remove symbols/spaces to find distributed characters
-    # Only alphanumeric characters remain
+    # PASS 3: Obfuscation Scan (Spaces/Symbols removed)
+    # Catches "f u c k" or "s.h.i.t"
     noise_free = re.sub(r'[^a-z0-9]', '', normalized_text)
-    if ABUSE_PATTERN_RELAXED.search(noise_free):
+    if RELAXED_PATTERN.search(noise_free):
         return True, "Attempted Profanity Bypass"
 
-    # 5. Link Protection
+    # PASS 4: Link Protection
     if "makaut" not in normalized_text:
         for domain in SPAM_DOMAINS:
             if domain in normalized_text:

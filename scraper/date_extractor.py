@@ -9,7 +9,7 @@ DATE_PATTERN = r"(?i)(\d{1,2})(?:st|nd|rd|th)?[\s\-\/\.]*([a-z]{3,10}|\d{1,2})[\
 def extract_date(text: str):
     if not text: return None
     
-    # Normalize text (remove hidden chars)
+    # Normalize text
     clean = unicodedata.normalize("NFKD", text)
     clean = " ".join(clean.split()).strip()
 
@@ -38,7 +38,8 @@ def extract_date(text: str):
 
             dt = datetime(int(year), m_num, int(day))
 
-            # TARGET CHECK: Accept 2025 and 2026 (Academic Year logic)
+            # TARGET CHECK: Accept Current Year AND Previous Year (Academic Window)
+            # Example: In 2026, we accept 2026 and 2025.
             if dt.year in [TARGET_YEAR, TARGET_YEAR - 1]:
                 return dt
 

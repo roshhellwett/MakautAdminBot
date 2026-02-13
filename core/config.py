@@ -1,5 +1,6 @@
 import os
 import logging
+from datetime import datetime
 from dotenv import load_dotenv
 
 # Load local .env for testing, but Railway env vars take precedence
@@ -36,8 +37,10 @@ else:
 SCRAPE_INTERVAL = int(os.getenv("SCRAPE_INTERVAL", "300"))
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 
-# FIX: Updated Year to 2026 so current notices are accepted
-TARGET_YEAR = 2026
+# FIX: Dynamic Year Configuration
+# Automatically tracks the current year.
+# The scraper will look for [CURRENT_YEAR, CURRENT_YEAR - 1]
+TARGET_YEAR = datetime.now().year
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
@@ -46,5 +49,5 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 # ==============================
 SSL_VERIFY_EXEMPT = ["makautexam.net", "www.makautexam.net"]
 REQUEST_TIMEOUT = 30.0
-MAX_PDF_SIZE_MB = 10  # Memory guard to prevent OOM crashes# RAM Safety Limit  # Memory guard to prevent OOM crashes [cite: 45]
+MAX_PDF_SIZE_MB = 10  # Memory guard
 #@academictelebotbyroshhellwett
