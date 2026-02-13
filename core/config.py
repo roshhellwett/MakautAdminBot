@@ -3,6 +3,7 @@ import logging
 from datetime import datetime
 from dotenv import load_dotenv
 
+# Load local .env for testing, but Railway env vars take precedence
 load_dotenv()
 
 # ==============================
@@ -20,6 +21,7 @@ if not BOT_TOKEN:
 # ==============================
 # CLOUD DATABASE CONFIGURATION
 # ==============================
+# Railway provides 'postgres://', but SQLAlchemy requires 'postgresql+asyncpg://'
 _RAW_DB_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///local_backup.db")
 
 if _RAW_DB_URL.startswith("postgres://"):

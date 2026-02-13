@@ -23,6 +23,8 @@ async def start_pipeline():
                 if not items:
                     continue
 
+                # 2. LOGIC FIX: Sort by Date Ascending (Oldest First)
+                # If scraping returns random order, we must enforce date sorting
                 items.sort(key=lambda x: x['published_date'], reverse=False)
                 
                 new_notices = []

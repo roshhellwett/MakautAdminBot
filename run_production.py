@@ -16,6 +16,7 @@ from admin_bot.admin_app import start_admin_bot
 from group_bot.group_app import start_group_bot
 from core.task_manager import supervised_task
 from health_check import verify_system
+from core.config import SEARCH_BOT_TOKEN, ADMIN_BOT_TOKEN
 
 setup_logger()
 logger = logging.getLogger("ORCHESTRATOR")
@@ -33,10 +34,7 @@ async def production_sequence():
 
     # PHASE 1: INFRASTRUCTURE
     try:
-        # 1. Create Tables (PostgreSQL)
         await init_db()
-        
-        # 2. Run Health Check
         await verify_system()
     except Exception as e:
         logger.critical(f"💀 FATAL BOOT FAILURE: {e}")
@@ -57,11 +55,16 @@ async def production_sequence():
     # PHASE 4: CLUSTER LAUNCH
     tasks = [
         asyncio.create_task(supervised_task("SEARCH_BOT", start_search_bot)),
-        asyncio.create_task(supervised_task("ADMIN_BOT", start_admin_bot)),
         asyncio.create_task(supervised_task("GROUP_BOT", start_group_bot)),
         asyncio.create_task(supervised_task("PIPELINE", start_pipeline))
     ]
     
+    # SAFETY: Only launch Admin Bot if it has a UNIQUE token
+    if ADMIN_BOT_TOKEN and ADMIN_BOT_TOKEN != SEARCH_BOT_TOKEN:
+        tasks.append(asyncio.create_task(supervised_task("ADMIN_BOT", start_admin_bot)))
+    else:
+        logger.warning("⚠️ ADMIN BOT DISABLED: Token is missing or identical to Search Bot.")
+
     logger.info("✅ ALL SYSTEMS OPERATIONAL. MONITORING ACTIVE.")
     
     try:
@@ -74,3 +77,4 @@ if __name__ == "__main__":
         asyncio.run(production_sequence())
     except KeyboardInterrupt:
         pass
+        #@academictelebotbyroshhellwett
