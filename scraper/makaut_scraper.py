@@ -61,28 +61,27 @@ async def build_item(raw_data, source_name):
 
     if not title or not url: return None
     
-    # 1. Forensic Noise Filtering
-    BLOCKLIST = ["about us", "contact", "home", "back", "gallery", "archive", "click here", "apply now", "visit"]
+    # 1. Forensic Noise Filtering (Added "syllabus" to prevent button clicks)
+    BLOCKLIST = ["about us", "contact", "home", "back", "gallery", "archive", "click here", "apply now", "visit", "syllabus"]
     if len(title) < 5 or any(k in title.lower() for k in BLOCKLIST): 
         return None
 
     # 2. GHOST FILTER: Reject explicitly old academic years in the text
-    # This stops old PDFs with new metadata from tricking the bot
     OLD_YEARS = ["2019", "2020", "2021", "2022", "2023"]
-    # If it mentions an old year, and does NOT mention the current year, drop it.
     if any(y in title for y in OLD_YEARS) and str(TARGET_YEARS[0]) not in title:
         return None
 
-    # 3. Date Discovery (Title -> Context -> PDF)
+    # 3. STRICT Date Discovery (Title -> Context ONLY)
     real_date = extract_date(title) 
     if not real_date and context:
         real_date = extract_date(context)
     
-    # 4. Deep Scan (PDF Header Analysis)
-    if not real_date and ".pdf" in url.lower():
-        real_date = await get_date_from_pdf(url)
+    # 🚨 THE FIX: No Date in Text? Then it's a website button, NOT a notice! Drop it.
+    # We completely removed the PDF metadata scan here to prevent false positives.
+    if not real_date:
+        return None
 
-    # 5. Validity Check (Dynamic Year Window)
+    # 4. Validity Check (Dynamic Year Window)
     if real_date and real_date.year in TARGET_YEARS:
         return {
             "title": title.strip(),
