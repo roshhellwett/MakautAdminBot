@@ -1,0 +1,71 @@
+# ==========================================
+# 🔐 SECURITY (CRITICAL)
+# ==========================================
+.env
+.env.*
+*.env
+secrets.json
+config.py
+zenith_group_bot/word_list.py  # Optional: If you want your ban list private
+
+# ==========================================
+# 🐍 PYTHON BASICS
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ==========================================
+# 📦 VIRTUAL ENVIRONMENTS
+# ==========================================
+.venv/
+venv/
+ENV/
+env/
+.env_win/
+
+# ==========================================
+# 🛠️ IDE & TOOLS
+# ==========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# ==========================================
+# 🪵 LOGS & DATABASES
+# ==========================================
+*.log
+*.sqlite
+*.sqlite3
+*.db
+celerybeat-schedule
+celerybeat.pid
+
+# ==========================================
+# 🧪 TESTING
+# ==========================================
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
