@@ -1,7 +1,7 @@
 import asyncio
 from core.task_manager import supervised_task
 from core.logger import setup_logger
-from zenith_group_bot.group_app import start_group_bot
+from zenith_group_bot.group_app import start_group_bot, stop_group_bot
 from zenith_group_bot.repository import dispose_group_engine
 
 logger = setup_logger("PRODUCTION")
@@ -16,6 +16,7 @@ async def main():
         logger.info("🛑 Task Gather Cancelled.")
     finally:
         logger.info("🛑 Executing Graceful Cloud Shutdown Sequence...")
+        await stop_group_bot() # Cleanly halts Telegram polling
         await dispose_group_engine()
         logger.info("✅ Disconnected from database safely.")
 

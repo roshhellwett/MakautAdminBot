@@ -1,6 +1,7 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import select, delete, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from datetime import timedelta
 from cachetools import TTLCache
 
@@ -40,30 +41,28 @@ class SettingsRepo:
     @staticmethod
     async def upsert_settings(chat_id: int, owner_id: int, group_name: str, features: str = None, strength: str = None, is_active: bool = None):
         async with AsyncSessionLocal() as session:
-            stmt = select(GroupSettings).where(GroupSettings.chat_id == chat_id)
-            record = (await session.execute(stmt)).scalar_one_or_none()
-            
-            if not record:
-                record = GroupSettings(chat_id=chat_id, owner_id=owner_id, group_name=group_name)
-                session.add(record)
-            
-            if features: record.features = features
-            if strength: record.strength = strength
-            if is_active is not None: record.is_active = is_active
-            
-            await session.commit()
-            settings_cache[chat_id] = record
-            return record
+            stmt = pg_insert(GroupSettings).values(
+                chat_id=chat_id, owner_id=owner_id, group_name=group_name, 
+                features=features or "both", strength=strength or "medium", is_active=is_active or False
+            )
+            update_dict = {}
+            if features: update_dict['features'] = features
+            if strength: update_dict['strength'] = strength
+            if is_active is not None: update_dict['is_active'] = is_active
+            if group_name: update_dict['group_name'] = group_name
 
-    @staticmethod
-    async def set_active_status(chat_id: int, is_active: bool):
-        async with AsyncSessionLocal() as session:
-            stmt = select(GroupSettings).where(GroupSettings.chat_id == chat_id)
-            record = (await session.execute(stmt)).scalar_one_or_none()
-            if record:
-                record.is_active = is_active
-                await session.commit()
-                settings_cache[chat_id] = record
+            if update_dict:
+                stmt = stmt.on_conflict_do_update(index_elements=['chat_id'], set_=update_dict)
+            else:
+                stmt = stmt.on_conflict_do_nothing()
+                
+            await session.execute(stmt)
+            await session.commit()
+            
+            # Fetch updated for cache
+            res = await session.execute(select(GroupSettings).where(GroupSettings.chat_id == chat_id))
+            record = res.scalar_one()
+            settings_cache[chat_id] = record
             return record
 
     @staticmethod
@@ -89,30 +88,34 @@ class SettingsRepo:
 
 class GroupRepo:
     @staticmethod
-    async def process_violation(user_id: int, chat_id: int):
+    async def process_violation(user_id: int, chat_id: int) -> int:
+        """FAANG-Grade Atomic Increment to prevent Race Condition exploits."""
         async with AsyncSessionLocal() as session:
-            stmt = select(GroupStrike).where(GroupStrike.user_id == user_id, GroupStrike.chat_id == chat_id)
-            record = (await session.execute(stmt)).scalar_one_or_none()
-            if not record:
-                record = GroupStrike(user_id=user_id, chat_id=chat_id, strike_count=1, last_violation=utc_now())
-                session.add(record)
-            else:
-                record.strike_count += 1
-                record.last_violation = utc_now()
+            stmt = pg_insert(GroupStrike).values(
+                user_id=user_id, chat_id=chat_id, strike_count=1, last_violation=utc_now()
+            ).on_conflict_do_update(
+                index_elements=['user_id', 'chat_id'],
+                set_=dict(
+                    strike_count=GroupStrike.strike_count + 1,
+                    last_violation=utc_now()
+                )
+            ).returning(GroupStrike.strike_count)
+            
+            result = await session.execute(stmt)
             await session.commit()
-            return record.strike_count
+            return result.scalar()
 
 class MemberRepo:
     @staticmethod
     async def register_new_member(user_id: int, chat_id: int):
         async with AsyncSessionLocal() as session:
-            stmt = select(NewMember).where(NewMember.user_id == user_id, NewMember.chat_id == chat_id)
-            record = (await session.execute(stmt)).scalar_one_or_none()
-            if not record:
-                record = NewMember(user_id=user_id, chat_id=chat_id, joined_at=utc_now())
-                session.add(record)
-            else:
-                record.joined_at = utc_now()
+            stmt = pg_insert(NewMember).values(
+                user_id=user_id, chat_id=chat_id, joined_at=utc_now()
+            ).on_conflict_do_update(
+                index_elements=['user_id', 'chat_id'],
+                set_=dict(joined_at=utc_now())
+            )
+            await session.execute(stmt)
             await session.commit()
             quarantine_cache.pop(f"{chat_id}_{user_id}", None)
 

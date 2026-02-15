@@ -1,14 +1,21 @@
 import asyncio
+from typing import Callable, Coroutine, Any
 from core.logger import setup_logger
 
 logger = setup_logger("TASK_MANAGER")
 active_services = set()
+# 🚀 PREVENT GC FROM KILLING BACKGROUND TASKS
+background_tasks = set()
 
-async def supervised_task(name: str, coro_func):
-    """Zenith Supreme: Automatic Recovery Supervisor."""
+def fire_and_forget(coro: Coroutine[Any, Any, Any]) -> None:
+    """Safely executes background tasks without blocking and prevents GC."""
+    task = asyncio.create_task(coro)
+    background_tasks.add(task)
+    task.add_done_callback(background_tasks.discard)
+
+async def supervised_task(name: str, coro_func: Callable[[], Coroutine[Any, Any, Any]]):
     if name in active_services: return
     active_services.add(name)
-    
     retry_delay = 5
     while True:
         try:
