@@ -56,14 +56,21 @@ async def check_ai_rate_limit(user_id: int) -> tuple[bool, str]:
 def sanitize_telegram_html(raw_text: str) -> str:
     if not raw_text: return ""
     txt = raw_text
+    
+    # Strip markdown code block wrappers if LLM hallucinated them
     if txt.startswith("```html"): txt = txt[7:]
     elif txt.startswith("```"): txt = txt[3:]
     if txt.endswith("```"): txt = txt[:-3]
     
-    txt = re.sub(r"<img[^>]*>", "[Image Omitted]", txt, flags=re.IGNORECASE)
-    txt = re.sub(r"</?p>", "\n", txt, flags=re.IGNORECASE)
-    txt = re.sub(r"<br\s*/?>", "\n", txt, flags=re.IGNORECASE)
-    txt = re.sub(r"</?div[^>]*>", "", txt, flags=re.IGNORECASE)
-    txt = re.sub(r"</?span[^>]*>", "", txt, flags=re.IGNORECASE)
+    # Convert markdown bold to HTML bold safely
     txt = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", txt)
+    
+    # 🚀 CRITICAL REFINEMENT: Strip unsupported web tags that crash Telegram
+    txt = re.sub(r"<img[^>]*>", "[Image Omitted]", txt, flags=re.IGNORECASE)
+    txt = re.sub(r"</?(p|div|span|h[1-6]|ul|li|ol|script|style)[^>]*>", "\n", txt, flags=re.IGNORECASE)
+    txt = re.sub(r"<br\s*/?>", "\n", txt, flags=re.IGNORECASE)
+    
+    # Clean up massive gaps created by stripping tags
+    txt = re.sub(r'\n{3,}', '\n\n', txt)
+    
     return txt.strip()
