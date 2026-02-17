@@ -2,11 +2,12 @@ import asyncio
 import random
 from fastapi import APIRouter, Request, Response
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.error import BadRequest
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 
 from core.logger import setup_logger
 from core.config import CRYPTO_BOT_TOKEN, WEBHOOK_URL, WEBHOOK_SECRET, ADMIN_USER_ID
-from zenith_crypto_bot.ui import get_main_dashboard, get_welcome_msg, get_back_button
+from zenith_crypto_bot.ui import get_main_dashboard, get_welcome_msg, get_back_button, get_audits_keyboard
 from zenith_crypto_bot.repository import SubscriptionRepo, init_crypto_db, dispose_crypto_engine
 
 logger = setup_logger("SVC_WHALE")
@@ -55,7 +56,6 @@ async def cmd_keygen(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"🔐 <b>PRO ACTIVATION KEY GENERATED</b>\n\n<code>{new_key}</code>\n\n<i>Tap the key to copy it.</i>", parse_mode="HTML")
     except ValueError: pass
 
-# --- 💳 ACTIVATION HANDLER ---
 async def cmd_activate(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         return await update.message.reply_text("⚠️ <b>Invalid Format.</b> Use: <code>/activate [YOUR_KEY]</code>", parse_mode="HTML")
@@ -64,49 +64,67 @@ async def cmd_activate(update: Update, context: ContextTypes.DEFAULT_TYPE):
     success, msg = await SubscriptionRepo.redeem_key(update.effective_user.id, key_string)
     await update.message.reply_text(msg, parse_mode="HTML")
 
-# --- 🔍 TOKEN AUDIT HANDLER (Professional Terminology) ---
+# --- 🔍 TOKEN AUDIT CORE ENGINE ---
+async def perform_audit_scan(user_id: int, contract: str, msg, is_pro: bool):
+    """Abstracted engine so audits can be run from commands OR dashboard buttons."""
+    try:
+        await msg.edit_text(f"<i>Establishing RPC connection to {contract[:6]}...</i>", parse_mode="HTML")
+        await asyncio.sleep(0.6)
+        await msg.edit_text(f"<i>Executing bytecode vulnerability scan...</i>", parse_mode="HTML")
+        await asyncio.sleep(0.8)
+        
+        # 🗂️ Save to Vault
+        await SubscriptionRepo.save_audit(user_id, contract)
+        
+        if is_pro:
+            report = (
+                f"🔍 <b>ZENITH SECURITY AUDIT: DEEP SCAN</b>\n"
+                f"<b>Contract:</b> <code>{contract}</code>\n\n"
+                f"<b>Security Metrics:</b>\n"
+                f"• Honeypot Risk: <b>None Detected</b>\n"
+                f"• Mint Function: <b>Disabled (Renounced)</b>\n"
+                f"• Owner Privileges: <b>Revoked</b>\n"
+                f"• Blacklist Capability: <b>None</b>\n\n"
+                f"<b>Tax Analysis:</b>\n"
+                f"• Buy Tax: 0.0%\n"
+                f"• Sell Tax: 0.0%\n\n"
+                f"<b>System Verdict:</b> Contract structure indicates standard parameters. Safe for trade execution."
+            )
+            keyboard = [
+                [InlineKeyboardButton("⚡ Execute Trade (Jupiter)", url="https://jup.ag/")],
+                [InlineKeyboardButton("🗂️ View Saved Audits", callback_data="ui_saved_audits")],
+                [InlineKeyboardButton("🔙 Main Menu", callback_data="ui_main_menu")]
+            ]
+            await msg.edit_text(report, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+        else:
+            report = (
+                f"🔍 <b>ZENITH SECURITY AUDIT: SURFACE SCAN</b>\n"
+                f"<b>Contract:</b> <code>{contract[:6]}...{contract[-4:]}</code>\n\n"
+                f"<b>Security Metrics:</b>\n"
+                f"• Honeypot Risk: <b>None Detected</b>\n"
+                f"• Mint Function: <i>[Redacted - Pro Required]</i>\n"
+                f"• Owner Privileges: <i>[Redacted - Pro Required]</i>\n"
+                f"• Tax Analysis: <i>[Redacted - Pro Required]</i>\n\n"
+                f"⚠️ <i>Upgrade to Zenith Pro for comprehensive contract decompilation and exact tax rates.</i>"
+            )
+            keyboard = [
+                [InlineKeyboardButton("🗂️ View Saved Audits", callback_data="ui_saved_audits")],
+                [InlineKeyboardButton("🔙 Main Menu", callback_data="ui_main_menu")]
+            ]
+            await msg.edit_text(report, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+    except BadRequest:
+        pass # Handle cases where message is deleted mid-edit
+
 async def cmd_audit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         return await update.message.reply_text("⚠️ <b>Input Required:</b> Please provide a valid contract address.\nExample: <code>/audit 0x6982508145454Ce325dDbE47a25d4ec3d2311933</code>", parse_mode="HTML")
     
     contract = context.args[0]
-    msg = await update.message.reply_text(f"<i>Establishing RPC connection...</i>", parse_mode="HTML")
+    user_id = update.effective_user.id
+    msg = await update.message.reply_text(f"<i>Initializing...</i>", parse_mode="HTML")
     
-    await asyncio.sleep(0.6)
-    await msg.edit_text(f"<i>Executing bytecode vulnerability scan for {contract[:8]}...</i>", parse_mode="HTML")
-    await asyncio.sleep(0.8)
-    await msg.edit_text(f"<i>Analyzing liquidity locks and developer privileges...</i>", parse_mode="HTML")
-    await asyncio.sleep(0.8)
-    
-    days_left = await SubscriptionRepo.get_days_left(update.effective_user.id)
-    if days_left > 0:
-        report = (
-            f"🔍 <b>ZENITH SECURITY AUDIT: DEEP SCAN</b>\n"
-            f"<b>Contract:</b> <code>{contract}</code>\n\n"
-            f"<b>Security Metrics:</b>\n"
-            f"• Honeypot Risk: <b>None Detected</b>\n"
-            f"• Mint Function: <b>Disabled (Renounced)</b>\n"
-            f"• Owner Privileges: <b>Revoked</b>\n"
-            f"• Blacklist Capability: <b>None</b>\n\n"
-            f"<b>Tax Analysis:</b>\n"
-            f"• Buy Tax: 0.0%\n"
-            f"• Sell Tax: 0.0%\n\n"
-            f"<b>System Verdict:</b> Contract structure indicates standard parameters. Safe for trade execution."
-        )
-        keyboard = [[InlineKeyboardButton("⚡ Execute Trade (Jupiter)", url="https://jup.ag/")]]
-        await msg.edit_text(report, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
-    else:
-        report = (
-            f"🔍 <b>ZENITH SECURITY AUDIT: SURFACE SCAN</b>\n"
-            f"<b>Contract:</b> <code>{contract[:6]}...{contract[-4:]}</code>\n\n"
-            f"<b>Security Metrics:</b>\n"
-            f"• Honeypot Risk: <b>None Detected</b>\n"
-            f"• Mint Function: <i>[Redacted - Pro Required]</i>\n"
-            f"• Owner Privileges: <i>[Redacted - Pro Required]</i>\n"
-            f"• Tax Analysis: <i>[Redacted - Pro Required]</i>\n\n"
-            f"⚠️ <i>Upgrade to Zenith Pro for comprehensive contract decompilation and exact tax rates.</i>"
-        )
-        await msg.edit_text(report, parse_mode="HTML")
+    days_left = await SubscriptionRepo.get_days_left(user_id)
+    await perform_audit_scan(user_id, contract, msg, days_left > 0)
 
 # --- 📡 INTERACTIVE BUTTON HANDLER ---
 async def handle_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -117,63 +135,95 @@ async def handle_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     days_left = await SubscriptionRepo.get_days_left(user_id)
     is_pro = days_left > 0
     
-    if query.data == "ui_main_menu":
-        await query.edit_message_text(get_welcome_msg(update.effective_user.first_name), reply_markup=get_main_dashboard(is_pro), parse_mode="HTML")
+    try:
+        if query.data == "ui_main_menu":
+            await query.edit_message_text(get_welcome_msg(update.effective_user.first_name), reply_markup=get_main_dashboard(is_pro), parse_mode="HTML")
 
-    elif query.data == "ui_pro_info":
-        status = f"🟢 <b>Status: Active</b> ({days_left} days remaining)" if is_pro else "🔴 <b>Status: Inactive</b> (Standard Tier)"
-        help_text = (
-            f"<b>Zenith Pro Module</b>\n\n{status}\n\n"
-            "<b>Activation Instructions:</b>\n"
-            "To unlock zero-latency data and execution links, submit your activation key using the following format:\n"
-            "<code>/activate ZENITH-XXXX-XXXX</code>\n\n"
-            f"<i>Account ID: {user_id}</i>"
-        )
-        await query.edit_message_text(help_text, reply_markup=get_back_button(), parse_mode="HTML")
-
-    elif query.data == "ui_whale_radar":
-        await query.edit_message_text("<i>Configuring telemetry...</i>", parse_mode="HTML")
-        await asyncio.sleep(0.5)
-        await SubscriptionRepo.toggle_alerts(user_id, True)
-        
-        if is_pro:
-            await query.edit_message_text("⚡ <b>PRO RADAR: ONLINE</b>\n\nWebSocket connection active. You are now tracking zero-latency, high-volume capital movements ($1M+).\n\n<i>Leave this chat open to receive live updates.</i>", reply_markup=get_back_button(), parse_mode="HTML")
-        else:
-            await query.edit_message_text("📊 <b>STANDARD RADAR: ONLINE</b>\n\nPolling connection active. You are receiving delayed alerts for mid-cap movements ($50k+).\n\n<i>Upgrade to Pro for real-time tracking and exact wallet addresses.</i>", reply_markup=get_back_button(), parse_mode="HTML")
-
-    elif query.data == "ui_audit":
-        await query.edit_message_text("🔍 <b>Smart Contract Auditor</b>\n\nTo scan a token for vulnerabilities, send the contract address in the chat:\n\n<code>/audit 0xYourContractAddressHere</code>", reply_markup=get_back_button(), parse_mode="HTML")
-        
-    elif query.data == "ui_volume":
-        await query.edit_message_text("<i>Scanning mempool for volume anomalies...</i>", parse_mode="HTML")
-        await asyncio.sleep(1.2)
-        
-        if is_pro:
-            pulse_data = (
-                "🚨 <b>VOLUME ANOMALY DETECTED</b>\n\n"
-                "<b>Pair:</b> PEPE / WETH\n"
-                "<b>Volume (5m):</b> +640%\n"
-                "<b>Current Price:</b> $0.00000845\n"
-                "<b>Liquidity Pool:</b> $4.2M\n"
-                "<b>Contract:</b> <code>0x6982508145454Ce325dDbE47a25d4ec3d2311933</code>\n\n"
-                "<i>Select an action below to proceed.</i>"
+        elif query.data == "ui_pro_info":
+            status = f"🟢 <b>Status: Active</b> ({days_left} days remaining)" if is_pro else "🔴 <b>Status: Inactive</b> (Standard Tier)"
+            help_text = (
+                f"<b>Zenith Pro Module</b>\n\n{status}\n\n"
+                "<b>Activation Instructions:</b>\n"
+                "To unlock zero-latency data and execution links, submit your activation key using the following format:\n"
+                "<code>/activate ZENITH-XXXX-XXXX</code>\n\n"
+                f"<i>Account ID: {user_id}</i>"
             )
-            keyboard = [
-                [InlineKeyboardButton("⚡ Execute Trade (Uniswap)", url="https://app.uniswap.org/")],
-                [InlineKeyboardButton("📊 View Chart", url="https://dexscreener.com/")],
-                [InlineKeyboardButton("🔙 Return to Main Menu", callback_data="ui_main_menu")]
-            ]
-            await query.edit_message_text(pulse_data, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
-        else:
-            pulse_data = (
-                "📊 <b>VOLUME ANOMALY DETECTED</b>\n\n"
-                "<b>Pair:</b> PEPE / WETH\n"
-                "<b>Volume (5m):</b> +640%\n"
-                "<b>Contract:</b> <i>[Redacted - Pro Required]</i>\n"
-                "<b>Liquidity Pool:</b> <i>[Redacted - Pro Required]</i>\n\n"
-                "<i>Upgrade to Zenith Pro to reveal contract addresses and execute trades.</i>"
-            )
-            await query.edit_message_text(pulse_data, reply_markup=get_back_button(), parse_mode="HTML")
+            await query.edit_message_text(help_text, reply_markup=get_back_button(), parse_mode="HTML")
+
+        elif query.data == "ui_whale_radar":
+            await query.edit_message_text("<i>Configuring telemetry...</i>", parse_mode="HTML")
+            await asyncio.sleep(0.5)
+            await SubscriptionRepo.toggle_alerts(user_id, True)
+            
+            if is_pro:
+                await query.edit_message_text("⚡ <b>PRO RADAR: ONLINE</b>\n\nWebSocket connection active. You are now tracking zero-latency, high-volume capital movements ($1M+).\n\n<i>Leave this chat open to receive live updates.</i>", reply_markup=get_back_button(), parse_mode="HTML")
+            else:
+                await query.edit_message_text("📊 <b>STANDARD RADAR: ONLINE</b>\n\nPolling connection active. You are receiving delayed alerts for mid-cap movements ($50k+).\n\n<i>Upgrade to Pro for real-time tracking and exact wallet addresses.</i>", reply_markup=get_back_button(), parse_mode="HTML")
+
+        elif query.data == "ui_audit":
+            await query.edit_message_text("🔍 <b>Smart Contract Auditor</b>\n\nTo scan a token for vulnerabilities, send the contract address in the chat:\n\n<code>/audit 0xYourContractAddressHere</code>", reply_markup=get_back_button(), parse_mode="HTML")
+        
+        # --- 🗂️ SAVED AUDITS LOGIC ---
+        elif query.data == "ui_saved_audits":
+            audits = await SubscriptionRepo.get_saved_audits(user_id)
+            if not audits:
+                await query.edit_message_text("🗂️ <b>Audit Vault</b>\n\nYou currently have no saved audits in your history.\nRun a scan by sending <code>/audit [contract]</code>.", reply_markup=get_back_button(), parse_mode="HTML")
+            else:
+                await query.edit_message_text("🗂️ <b>Audit Vault</b>\n\nSelect a previously scanned contract to view the security report or execute a trade.", reply_markup=get_audits_keyboard(audits), parse_mode="HTML")
+                
+        elif query.data.startswith("ui_del_audit_"):
+            audit_id = int(query.data.split("_")[-1])
+            await SubscriptionRepo.delete_audit(user_id, audit_id)
+            audits = await SubscriptionRepo.get_saved_audits(user_id)
+            if not audits:
+                await query.edit_message_text("🗂️ <b>Audit Vault</b>\n\nAll records removed. Vault is empty.", reply_markup=get_back_button(), parse_mode="HTML")
+            else:
+                await query.edit_message_text("🗂️ <b>Audit Vault</b>\n\nRecord successfully removed. Remaining history:", reply_markup=get_audits_keyboard(audits), parse_mode="HTML")
+
+        elif query.data == "ui_clear_audits":
+            await SubscriptionRepo.clear_all_audits(user_id)
+            await query.edit_message_text("🗂️ <b>Audit Vault</b>\n\nSystem wiped. All historical audit data has been permanently erased.", reply_markup=get_back_button(), parse_mode="HTML")
+
+        elif query.data.startswith("ui_view_audit_"):
+            audit_id = int(query.data.split("_")[-1])
+            audit_record = await SubscriptionRepo.get_audit_by_id(user_id, audit_id)
+            if audit_record:
+                await perform_audit_scan(user_id, audit_record.contract, query.message, is_pro)
+            else:
+                await query.answer("Record no longer exists.", show_alert=True)
+
+        elif query.data == "ui_volume":
+            await query.edit_message_text("<i>Scanning mempool for volume anomalies...</i>", parse_mode="HTML")
+            await asyncio.sleep(1.2)
+            
+            if is_pro:
+                pulse_data = (
+                    "🚨 <b>VOLUME ANOMALY DETECTED</b>\n\n"
+                    "<b>Pair:</b> PEPE / WETH\n"
+                    "<b>Volume (5m):</b> +640%\n"
+                    "<b>Current Price:</b> $0.00000845\n"
+                    "<b>Liquidity Pool:</b> $4.2M\n"
+                    "<b>Contract:</b> <code>0x6982508145454Ce325dDbE47a25d4ec3d2311933</code>\n\n"
+                    "<i>Select an action below to proceed.</i>"
+                )
+                keyboard = [
+                    [InlineKeyboardButton("⚡ Execute Trade (Uniswap)", url="https://app.uniswap.org/")],
+                    [InlineKeyboardButton("📊 View Chart", url="https://dexscreener.com/")],
+                    [InlineKeyboardButton("🔙 Return to Main Menu", callback_data="ui_main_menu")]
+                ]
+                await query.edit_message_text(pulse_data, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+            else:
+                pulse_data = (
+                    "📊 <b>VOLUME ANOMALY DETECTED</b>\n\n"
+                    "<b>Pair:</b> PEPE / WETH\n"
+                    "<b>Volume (5m):</b> +640%\n"
+                    "<b>Contract:</b> <i>[Redacted - Pro Required]</i>\n"
+                    "<b>Liquidity Pool:</b> <i>[Redacted - Pro Required]</i>\n\n"
+                    "<i>Upgrade to Zenith Pro to reveal contract addresses and execute trades.</i>"
+                )
+                await query.edit_message_text(pulse_data, reply_markup=get_back_button(), parse_mode="HTML")
+    except BadRequest:
+        pass # Safely ignore spam-click UI errors
 
 # --- 🌊 LIVE BLOCKCHAIN DISPATCHER ---
 async def alert_dispatcher():
@@ -187,6 +237,13 @@ async def alert_dispatcher():
 async def active_blockchain_watcher():
     coins = [("USDC", "Ethereum"), ("USDT", "Tron"), ("ETH", "Ethereum"), ("WBTC", "Ethereum"), ("SOL", "Solana")]
     destinations = ["Binance Deposit", "Coinbase Hot Wallet", "Kraken", "Unknown DEX Route", "Wintermute OTC"]
+    
+    # 🚀 FIX: Dynamic Routing to correct Block Explorers
+    explorer_map = {
+        "Ethereum": "https://etherscan.io/tx/",
+        "Tron": "https://tronscan.org/#/transaction/",
+        "Solana": "https://solscan.io/tx/"
+    }
 
     while True:
         await asyncio.sleep(180) 
@@ -195,6 +252,7 @@ async def active_blockchain_watcher():
             
         coin, network = random.choice(coins)
         dest = random.choice(destinations)
+        explorer_url = explorer_map.get(network, "https://etherscan.io/tx/")
         
         amount_pro = random.randint(1000000, 50000000) if coin not in ["ETH", "WBTC"] else random.randint(500, 5000)
         amount_free = random.randint(50000, 250000) if coin not in ["ETH", "WBTC"] else random.randint(10, 50)
@@ -207,7 +265,7 @@ async def active_blockchain_watcher():
                 f"<b>Asset:</b> {amount_pro:,} {coin}\n"
                 f"<b>Network:</b> {network}\n"
                 f"<b>Destination:</b> {dest}\n"
-                f"<b>Hash:</b> <a href='https://etherscan.io/tx/{tx_hash_pro}'>{tx_hash_pro[:10]}...</a>\n\n"
+                f"<b>Hash:</b> <a href='{explorer_url}{tx_hash_pro}'>{tx_hash_pro[:10]}...</a>\n\n"
                 f"<i>Action:</i> <a href='https://app.uniswap.org/'>[Execute Trade]</a>"
             )
             await alert_queue.put((user_id, pro_text))

@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 CryptoBase = declarative_base()
 
 class CryptoUser(CryptoBase):
-    """Saves user preferences so radar doesn't turn off when server restarts."""
     __tablename__ = "crypto_users"
     user_id = Column(BigInteger, primary_key=True)
     alerts_enabled = Column(Boolean, default=False)
@@ -24,3 +23,11 @@ class ActivationKey(CryptoBase):
     is_used = Column(Boolean, default=False)
     used_by = Column(BigInteger, nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+class SavedAudit(CryptoBase):
+    """Stores the bounded history of user token audits."""
+    __tablename__ = "crypto_saved_audits"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, index=True, nullable=False)
+    contract = Column(String(150), nullable=False)
+    saved_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

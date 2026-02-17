@@ -7,10 +7,27 @@ def get_main_dashboard(is_pro: bool = False):
     
     keyboard = [
         [InlineKeyboardButton(radar_text, callback_data="ui_whale_radar")],
-        [InlineKeyboardButton("🔍 Smart Contract Audit", callback_data="ui_audit")],
+        [InlineKeyboardButton("🔍 New Contract Audit", callback_data="ui_audit"),
+         InlineKeyboardButton("🗂️ Saved Audits", callback_data="ui_saved_audits")],
         [InlineKeyboardButton("📈 DEX Volume Pulse", callback_data="ui_volume")],
         [InlineKeyboardButton(status_text, callback_data="ui_pro_info")]
     ]
+    return InlineKeyboardMarkup(keyboard)
+
+def get_audits_keyboard(audits):
+    """Generates the interactive history list for the user to view or delete."""
+    keyboard = []
+    for a in audits:
+        short_contract = f"{a.contract[:6]}...{a.contract[-4:]}"
+        keyboard.append([
+            InlineKeyboardButton(f"📜 View: {short_contract}", callback_data=f"ui_view_audit_{a.id}"),
+            InlineKeyboardButton("❌ Remove", callback_data=f"ui_del_audit_{a.id}")
+        ])
+    
+    if audits:
+        keyboard.append([InlineKeyboardButton("🗑️ Clear Entire History", callback_data="ui_clear_audits")])
+        
+    keyboard.append([InlineKeyboardButton("🔙 Return to Main Menu", callback_data="ui_main_menu")])
     return InlineKeyboardMarkup(keyboard)
 
 def get_back_button():

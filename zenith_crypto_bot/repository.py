@@ -2,10 +2,10 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from core.config import DATABASE_URL, DB_POOL_SIZE
-from zenith_crypto_bot.models import CryptoBase, Subscription, ActivationKey, CryptoUser
+from zenith_crypto_bot.models import CryptoBase, Subscription, ActivationKey, CryptoUser, SavedAudit
 
 engine = create_async_engine(DATABASE_URL, pool_size=DB_POOL_SIZE)
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -34,21 +34,16 @@ class SubscriptionRepo:
 
     @staticmethod
     async def get_alert_subscribers():
-        """Returns tuple: (list_of_free_users, list_of_pro_users)"""
         async with AsyncSessionLocal() as session:
             now = datetime.now(timezone.utc)
-            
-            # Get all users with alerts enabled
             users_res = await session.execute(select(CryptoUser.user_id).where(CryptoUser.alerts_enabled == True))
             all_alert_users = set([r[0] for r in users_res.all()])
             
-            # Get all active pro users
             pro_res = await session.execute(select(Subscription.user_id).where(Subscription.expires_at > now))
             all_pro_users = set([r[0] for r in pro_res.all()])
             
             pro_subscribers = list(all_alert_users.intersection(all_pro_users))
             free_subscribers = list(all_alert_users.difference(all_pro_users))
-            
             return free_subscribers, pro_subscribers
 
     @staticmethod
@@ -92,11 +87,55 @@ class SubscriptionRepo:
         async with AsyncSessionLocal() as session:
             res = await session.execute(select(Subscription).where(Subscription.user_id == user_id))
             sub = res.scalar_one_or_none()
-            
             now = datetime.now(timezone.utc)
             if not sub or sub.expires_at < now:
                 return 0
             return (sub.expires_at - now).days
+
+    # --- 🗂️ AUDIT VAULT LOGIC ---
+    @staticmethod
+    async def save_audit(user_id: int, contract: str):
+        """Saves an audit and strictly bounds history to 10 records per user."""
+        async with AsyncSessionLocal() as session:
+            # Prevent duplicate spam
+            stmt = select(SavedAudit).where(SavedAudit.user_id == user_id, SavedAudit.contract == contract)
+            exists = (await session.execute(stmt)).scalar_one_or_none()
+            if exists:
+                exists.saved_at = datetime.now(timezone.utc)
+            else:
+                # Prune old records to maintain strict DB hygiene
+                count_stmt = select(SavedAudit).where(SavedAudit.user_id == user_id).order_by(SavedAudit.saved_at.desc())
+                audits = (await session.execute(count_stmt)).scalars().all()
+                if len(audits) >= 10:
+                    await session.delete(audits[-1])
+                session.add(SavedAudit(user_id=user_id, contract=contract[:100]))
+            await session.commit()
+
+    @staticmethod
+    async def get_saved_audits(user_id: int):
+        async with AsyncSessionLocal() as session:
+            stmt = select(SavedAudit).where(SavedAudit.user_id == user_id).order_by(SavedAudit.saved_at.desc())
+            return (await session.execute(stmt)).scalars().all()
+
+    @staticmethod
+    async def get_audit_by_id(user_id: int, audit_id: int):
+        async with AsyncSessionLocal() as session:
+            stmt = select(SavedAudit).where(SavedAudit.user_id == user_id, SavedAudit.id == audit_id)
+            return (await session.execute(stmt)).scalar_one_or_none()
+
+    @staticmethod
+    async def delete_audit(user_id: int, audit_id: int):
+        async with AsyncSessionLocal() as session:
+            stmt = delete(SavedAudit).where(SavedAudit.user_id == user_id, SavedAudit.id == audit_id)
+            await session.execute(stmt)
+            await session.commit()
+
+    @staticmethod
+    async def clear_all_audits(user_id: int):
+        async with AsyncSessionLocal() as session:
+            stmt = delete(SavedAudit).where(SavedAudit.user_id == user_id)
+            await session.execute(stmt)
+            await session.commit()
 
 async def dispose_crypto_engine():
     await engine.dispose()
