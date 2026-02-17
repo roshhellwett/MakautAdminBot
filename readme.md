@@ -55,19 +55,13 @@ Zenith is built using a **multi-tenant, async-first microservices approach**, al
 
 ---
 
-## 🚀 Quick Start
-
-1. Clone the repository
-2. Copy `.env.example` to `.env` and fill in your tokens
-3. Install dependencies: `pip install -r requirements.txt`
-4. Run the server: `python main.py`
-
----
-
 ## 🤝 Access
 
-- 🤖 Telegram Zenith Group BOT Access: **@zenithgroupbot**
-- 🤖 Telegram Zenith AI BOT Access: **@zenithcodexbot**  
+-> 🤖 Telegram Zenith Group BOT Access: [**@zenithgroupbot**](https://t.me/zenithgroupbot).
+
+-> 🤖 Telegram Zenith AI BOT Access: [**@zenithcodexbot**](https://t.me/zenithcodexbot).
+
+-> 🤖 Telegram Zenith Whale BOT Access: [**@zenithwhalebot**](https://t.me/zenithwhalebot).
 
 ---
 
