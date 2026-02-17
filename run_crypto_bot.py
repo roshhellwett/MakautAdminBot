@@ -6,7 +6,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandle
 
 from core.logger import setup_logger
 from core.config import CRYPTO_BOT_TOKEN, WEBHOOK_URL, WEBHOOK_SECRET, ADMIN_USER_ID
-from zenith_crypto_bot.ui import get_main_dashboard, get_welcome_msg
+from zenith_crypto_bot.ui import get_main_dashboard, get_welcome_msg, get_back_button
 from zenith_crypto_bot.repository import SubscriptionRepo, init_crypto_db, dispose_crypto_engine
 
 logger = setup_logger("SVC_WHALE")
@@ -36,6 +36,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Register user in DB so we don't forget them!
     await SubscriptionRepo.register_user(user_id)
+
     days_left = await SubscriptionRepo.get_days_left(user_id)
     is_pro = days_left > 0
     
@@ -121,7 +122,16 @@ async def handle_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     days_left = await SubscriptionRepo.get_days_left(user_id)
     is_pro = days_left > 0
     
-    if query.data == "ui_pro_info":
+    # --- 🔙 NEW BACK BUTTON ROUTING ---
+    if query.data == "ui_main_menu":
+        first_name = update.effective_user.first_name
+        await query.edit_message_text(
+            get_welcome_msg(first_name), 
+            reply_markup=get_main_dashboard(is_pro), 
+            parse_mode="HTML"
+        )
+
+    elif query.data == "ui_pro_info":
         status = f"✅ <b>Pro Active:</b> {days_left} days remaining." if is_pro else "❌ <b>Pro Inactive.</b>"
         help_text = (
             f"💎 <b>Zenith Pro Module</b>\n\n{status}\n\n"
@@ -131,22 +141,21 @@ async def handle_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "<code>/activate ZENITH-XXXX-XXXX</code>\n\n"
             f"<i>(Your Telegram ID: {user_id})</i>"
         )
-        await query.edit_message_text(help_text, reply_markup=get_main_dashboard(is_pro), parse_mode="HTML")
+        await query.edit_message_text(help_text, reply_markup=get_back_button(), parse_mode="HTML")
 
     elif query.data == "ui_whale_radar":
         await query.edit_message_text("⚙️ <i>Configuring Radar Connection...</i>", parse_mode="HTML")
         await asyncio.sleep(0.5)
         
-        # Toggle alerts on permanently in the DB
         await SubscriptionRepo.toggle_alerts(user_id, True)
         
         if is_pro:
-            await query.edit_message_text("⚡ <b>PRO RADAR ONLINE</b>\n\nWebSocket connection established. You are now listening for real-time, zero-latency high-value movements ($1M+).\n\n<i>Leave this chat open to receive alerts.</i>", reply_markup=get_main_dashboard(is_pro), parse_mode="HTML")
+            await query.edit_message_text("⚡ <b>PRO RADAR ONLINE</b>\n\nWebSocket connection established. You are now listening for real-time, zero-latency high-value movements ($1M+).\n\n<i>Leave this chat open to receive alerts.</i>", reply_markup=get_back_button(), parse_mode="HTML")
         else:
-            await query.edit_message_text("📡 <b>FREE RADAR ONLINE</b>\n\nPolling connection established. You will receive delayed alerts for mid-tier movements ($50k+).\n\n<i>Upgrade to Pro for instant alerts.</i>", reply_markup=get_main_dashboard(is_pro), parse_mode="HTML")
+            await query.edit_message_text("📡 <b>FREE RADAR ONLINE</b>\n\nPolling connection established. You will receive delayed alerts for mid-tier movements ($50k+).\n\n<i>Upgrade to Pro for instant alerts.</i>", reply_markup=get_back_button(), parse_mode="HTML")
 
     elif query.data == "ui_audit":
-        await query.edit_message_text("🛡️ <b>Smart Contract Auditor</b>\n\nTo audit a token's security, send its contract address to me in the chat like this:\n\n<code>/audit 0xYourContractAddressHere</code>", reply_markup=get_main_dashboard(is_pro), parse_mode="HTML")
+        await query.edit_message_text("🛡️ <b>Smart Contract Auditor</b>\n\nTo audit a token's security, send its contract address to me in the chat like this:\n\n<code>/audit 0xYourContractAddressHere</code>", reply_markup=get_back_button(), parse_mode="HTML")
         
     elif query.data == "ui_volume":
         msg = await query.edit_message_text("📈 <b>Initializing DexScreener Pulse...</b>", parse_mode="HTML")
@@ -164,9 +173,11 @@ async def handle_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "🔗 <b>Contract:</b> <code>0x6982508145454Ce325dDbE47a25d4ec3d2311933</code>\n\n"
                 "<i>Click below to execute or audit.</i>"
             )
+            # Add the back button to the existing keyboard!
             keyboard = [
                 [InlineKeyboardButton("🛒 Sniper Swap", url="https://app.uniswap.org/")],
-                [InlineKeyboardButton("📊 DexScreener", url="https://dexscreener.com/")]
+                [InlineKeyboardButton("📊 DexScreener", url="https://dexscreener.com/")],
+                [InlineKeyboardButton("🔙 Back to Main Menu", callback_data="ui_main_menu")]
             ]
             await query.edit_message_text(pulse_data, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
         else:
@@ -178,7 +189,7 @@ async def handle_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "💧 <b>Liquidity:</b> <i>[PRO REQUIRED]</i>\n\n"
                 "<i>Upgrade to Zenith Pro to see contract addresses and instant swap links.</i>"
             )
-            await query.edit_message_text(pulse_data, reply_markup=get_main_dashboard(is_pro), parse_mode="HTML")
+            await query.edit_message_text(pulse_data, reply_markup=get_back_button(), parse_mode="HTML")
 
 # --- 🌊 LIVE BLOCKCHAIN DISPATCHER ---
 async def alert_dispatcher():
@@ -188,7 +199,7 @@ async def alert_dispatcher():
         try: 
             await bot_app.bot.send_message(chat_id=chat_id, text=text, parse_mode="HTML", disable_web_page_preview=True)
         except Exception: 
-            pass # Ignore blocked users
+            pass 
         alert_queue.task_done()
         await asyncio.sleep(0.05) # Max 20 msgs/sec
 
@@ -198,13 +209,12 @@ async def active_blockchain_watcher():
     destinations = ["Binance Deposit", "Coinbase Hot Wallet", "Kraken", "Unknown DEX", "Wintermute Trading"]
 
     while True:
-        # Wait 3 minutes between alerts
         await asyncio.sleep(180) 
         
         free_users, pro_users = await SubscriptionRepo.get_alert_subscribers()
         
         if not free_users and not pro_users:
-            continue # Skip if no one is listening
+            continue
             
         coin, network = random.choice(coins)
         dest = random.choice(destinations)
@@ -248,7 +258,6 @@ async def start_service():
     await init_crypto_db()
     bot_app = ApplicationBuilder().token(CRYPTO_BOT_TOKEN).build()
     
-    # 🚀 RE-CONNECTED THE HANDLERS
     bot_app.add_handler(CommandHandler("start", cmd_start))
     bot_app.add_handler(CommandHandler("activate", cmd_activate))
     bot_app.add_handler(CommandHandler("keygen", cmd_keygen))

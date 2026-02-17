@@ -13,6 +13,10 @@ def get_main_dashboard(is_pro: bool = False):
     ]
     return InlineKeyboardMarkup(keyboard)
 
+def get_back_button():
+    """Returns a keyboard with just the back button."""
+    return InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Main Menu", callback_data="ui_main_menu")]])
+
 def get_welcome_msg(name: str):
     return (
         f"🌌 <b>Welcome to Zenith Whale, {name}.</b>\n\n"
