@@ -1,4 +1,4 @@
-# Zenith — Institutional-Grade Crypto Intelligence for Telegram
+# PROJECT MONOLITH
 
 Zenith is a multi-bot Telegram platform that delivers real-time blockchain intelligence, automated content moderation, and AI-powered conversations — all running on a single monolithic FastAPI gateway.
 
@@ -112,6 +112,9 @@ projectmonolith/
 ```
 
 ---
+
+© 2026 [Zenith Open Source Projects](https://zenithopensourceprojects.vercel.app/). All Rights Reserved.  
+Zenith is a Open Source Project Idea's by @roshhellwett
 
 ## 📄 License
 
