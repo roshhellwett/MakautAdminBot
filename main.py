@@ -14,21 +14,25 @@ import run_crypto_bot
 
 logger = setup_logger("GATEWAY")
 
-# Global webhook rate limiter
-webhook_rate = TTLCache(maxsize=50000, ttl=5)
-
+# Global webhook rate limiter (Massive capacity for DDOS spikes)
+webhook_rate = TTLCache(maxsize=500000, ttl=5)
 
 async def rate_limit(request: Request):
-    ip = request.client.host if request.client else "unknown"
+    # 🚀 FAANG FIX: Extract true user IP behind Railway/AWS Load Balancers
+    ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown").split(",")[0].strip()
+    
+    # 🚀 FAANG FIX: Never rate-limit authenticated webhook paths. 
+    # Telegram sends thousands of requests per second. Limiting this blocks the bot.
+    if "/webhook/" in request.url.path:
+        return True
+        
     webhook_rate[ip] = webhook_rate.get(ip, 0) + 1
     if webhook_rate[ip] > 50:
         return False
     return True
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-
     logger.info("🚀 MONOLITH STARTING")
 
     if not WEBHOOK_SECRET:
@@ -64,26 +68,21 @@ async def lifespan(app: FastAPI):
     except asyncio.TimeoutError:
         logger.error("⚠️ Force closing: a service refused to shut down in time.")
 
-
 app = FastAPI(lifespan=lifespan)
-
 
 @app.middleware("http")
 async def global_protection(request: Request, call_next):
     if not await rate_limit(request):
-        return Response(status_code=429)
+        return JSONResponse({"error": "Rate Limit Exceeded. Traffic dropped."}, status_code=429)
     return await call_next(request)
-
 
 app.include_router(run_group_bot.router)
 app.include_router(run_ai_bot.router)
 app.include_router(run_crypto_bot.router)
 
-
 @app.get("/health")
 async def health():
-    return JSONResponse({"status": "ok"})
-
+    return JSONResponse({"status": "ok", "system": "Project Monolith - Enterprise Production Active"})
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=PORT)

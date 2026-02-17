@@ -156,5 +156,7 @@ async def ai_webhook(secret: str, request: Request):
         await bot_app.update_queue.put(Update.de_json(data, bot_app.bot))
         return Response(status_code=200)
     except Exception as e:
-        logger.error(f"AI Webhook Error: {e}")
-        return Response(status_code=500)
+        # 🚀 FAANG FIX: Return 200 OK for malformed payloads. 
+        # Returning 500 causes Telegram to endlessly retry the payload until your memory crashes!
+        logger.error(f"AI Webhook Malformed Payload Dropped: {e}")
+        return Response(status_code=200)

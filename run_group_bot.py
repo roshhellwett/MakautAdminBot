@@ -40,6 +40,7 @@ async def stop_service():
     await dispose_group_engine()
 
 # 🚀 The Bot's Personal Webhook Router
+# 🚀 The Bot's Personal Webhook Router
 @router.post("/webhook/group/{secret}")
 async def group_webhook(secret: str, request: Request):
     if secret != WEBHOOK_SECRET: return Response(status_code=403)
@@ -50,5 +51,6 @@ async def group_webhook(secret: str, request: Request):
         await bot_app.update_queue.put(Update.de_json(data, bot_app.bot))
         return Response(status_code=200)
     except Exception as e:
-        logger.error(f"Group Webhook Processing Error: {e}")
-        return Response(status_code=500)
+        # 🚀 FAANG FIX: Terminate bad JSON silently
+        logger.error(f"Group Webhook Malformed Payload Dropped: {e}")
+        return Response(status_code=200)

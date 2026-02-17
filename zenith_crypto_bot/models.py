@@ -1,4 +1,4 @@
-from sqlalchemy import Column, BigInteger, String, Boolean, DateTime, Integer
+from sqlalchemy import Column, BigInteger, String, Boolean, DateTime, Integer, UniqueConstraint
 from sqlalchemy.orm import declarative_base
 from datetime import datetime, timezone
 
@@ -25,9 +25,11 @@ class ActivationKey(CryptoBase):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 class SavedAudit(CryptoBase):
-    """Stores the bounded history of user token audits."""
     __tablename__ = "crypto_saved_audits"
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(BigInteger, index=True, nullable=False)
     contract = Column(String(150), nullable=False)
     saved_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    
+    # 🚀 FAANG FIX: Mathematically prevents duplicate records at the DB engine level
+    __table_args__ = (UniqueConstraint('user_id', 'contract', name='uix_user_contract'),)

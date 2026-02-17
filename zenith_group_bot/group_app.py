@@ -3,7 +3,7 @@ import traceback
 from cachetools import TTLCache
 from telegram import Update
 from telegram.constants import MessageEntityType
-from telegram.error import Forbidden, BadRequest
+from telegram.error import Forbidden, BadRequest, RetryAfter
 from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, CallbackQueryHandler, ChatMemberHandler, filters, ContextTypes
 
 from zenith_group_bot.setup_flow import cmd_setup, cmd_start_dm, button_handler, cmd_deletegroup
@@ -17,9 +17,7 @@ from core.config import GROUP_BOT_TOKEN
 logger = setup_logger("GROUP_BOT")
 _group_app = None
 
-# 🚀 SCENARIO 3: Admin Immunity Cache
 admin_cache = TTLCache(maxsize=1000, ttl=900)
-# 🚀 SCENARIO 18: Global Leaky Bucket (Max 25 outbound messages per second)
 global_message_semaphore = asyncio.Semaphore(25)
 
 async def is_user_admin(context: ContextTypes.DEFAULT_TYPE, chat_id: int, user_id: int) -> bool:
@@ -33,23 +31,30 @@ async def is_user_admin(context: ContextTypes.DEFAULT_TYPE, chat_id: int, user_i
     except Exception: return False
 
 async def safe_delete(msg):
-    try: await msg.delete()
-    except BadRequest as e:
-        # 🚀 SCENARIO 13: Rival Bot Race Condition Check
-        if "message to delete not found" in str(e).lower(): pass
-        else: raise
+    # 🚀 FAANG FIX: Extreme Raid Deletion Guarantee. 
+    # If a raid hits and Telegram throttles us, we sleep dynamically and force the deletion through.
+    for attempt in range(3):
+        try: 
+            await msg.delete()
+            break
+        except RetryAfter as e:
+            logger.warning(f"🛡️ Deletion Throttled by Telegram. Sleeping {e.retry_after}s to ensure spam is killed.")
+            await asyncio.sleep(e.retry_after + 0.1)
+        except BadRequest as e:
+            if "message to delete not found" in str(e).lower(): break
+            raise
+        except Exception:
+            break
 
 async def safe_send(context, chat_id, text, **kwargs):
-    # 🚀 SCENARIO 18: Global outbound throttling
     async with global_message_semaphore:
         try:
             msg = await context.bot.send_message(chat_id=chat_id, text=text, **kwargs)
-            await asyncio.sleep(0.04) # Enforces ~25 msg/sec global limit
+            await asyncio.sleep(0.04)
             return msg
         except Exception: return None
 
 async def trigger_circuit_breaker(e: Exception, chat_id: int, owner_id: int, group_name: str, context: ContextTypes.DEFAULT_TYPE):
-    # 🚀 SCENARIO 9: Stealth Permission Strip Detector
     if "rights" in str(e).lower() or "permission" in str(e).lower():
         await SettingsRepo.upsert_settings(chat_id, owner_id, None, is_active=False)
         alert = f"🚨 <b>CIRCUIT BREAKER TRIGGERED</b>\nZenith's admin permissions were revoked in <b>{group_name}</b>. Monitoring has been halted to prevent bot crashes."
@@ -68,11 +73,9 @@ async def notify_owner(context: ContextTypes.DEFAULT_TYPE, chat_id: int, owner_i
     except Forbidden:
         fallback_text = f"🚨 <a href='tg://user?id={owner_id}'>Admin</a>, I caught a rule violation by @{username} but couldn't DM you because you blocked me! Please unblock me."
         await safe_send(context, chat_id, fallback_text, parse_mode="HTML")
-    except Exception as e:
-        logger.debug(f"Could not notify owner {owner_id}: {e}")
+    except Exception: pass
 
 async def cmd_forgive(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # 🚀 SCENARIO 1: The Forgiveness Protocol
     chat_id = update.effective_chat.id
     user_id = update.effective_user.id
     if update.effective_chat.type == "private": return
@@ -88,7 +91,6 @@ async def cmd_forgive(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"✅ <b>Pardoned:</b> @{target_user.username}'s strike history has been wiped.", parse_mode="HTML")
 
 async def my_chat_member_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # 🚀 SCENARIO 5: Ghost Kick Detector
     result = update.my_chat_member
     if result.new_chat_member.status in ["left", "kicked", "banned"]:
         chat_id = result.chat.id
@@ -115,15 +117,12 @@ async def handle_new_members(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if not member.is_bot: await MemberRepo.register_new_member(member.id, chat_id)
 
 async def group_monitor_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # 🚀 SCENARIO 19: Poison Pill Safe Loop
     try:
-        # 🚀 SCENARIO 2: Edited Message Capture
         msg = update.message or update.edited_message
         if not msg or msg.from_user.is_bot: return
 
-        # 🚀 SCENARIO 7: Channel Identity & Anonymous Routing
         if msg.is_automatic_forward or msg.from_user.id == 1087968824: return
-        if msg.sender_chat: return # Ignore anonymous admin posts / channel identities
+        if msg.sender_chat: return 
 
         user = msg.from_user
         chat_id = update.effective_chat.id
@@ -133,7 +132,6 @@ async def group_monitor_handler(update: Update, context: ContextTypes.DEFAULT_TY
 
         if await is_user_admin(context, chat_id, user.id): return
 
-        # 🚀 SCENARIO 15 & 17: Pre-extract hidden markdown links before normalizer strips offsets
         hidden_urls = []
         for ent in (msg.entities or []) + (msg.caption_entities or []):
             if ent.type in [MessageEntityType.TEXT_LINK] and ent.url:
@@ -183,9 +181,7 @@ async def group_monitor_handler(update: Update, context: ContextTypes.DEFAULT_TY
     except Exception as e:
         logger.error(f"POISON PILL CAUGHT: {e}\n{traceback.format_exc()}")
 
-# 🚀 REFACTORED FOR WEBHOOK MONOLITH
 async def setup_group_app():
-    """Builds the PTB application but does not start polling."""
     if not GROUP_BOT_TOKEN:
         logger.warning("⚠️ GROUP_BOT_TOKEN missing! Group Service disabled.")
         return None
