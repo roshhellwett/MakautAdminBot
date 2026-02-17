@@ -1,34 +1,36 @@
 import re
-import asyncio
-import unicodedata
 from zenith_group_bot.word_list import BANNED_WORDS, SPAM_DOMAINS
 
-# Compile regex at startup (O(1) time complexity)
-_PATTERN_STRING = r'\b(' + '|'.join(map(re.escape, BANNED_WORDS)) + r')\b'
-BANNED_REGEX = re.compile(_PATTERN_STRING, re.IGNORECASE)
 
-def _sync_regex_scan(text: str) -> tuple[bool, str]:
-    if not text: return False, ""
-    
-    # 🚀 SCENARIO 6: Strip weird fonts & invisible characters (Zalgo/Spoofing)
-    normalized_text = unicodedata.normalize('NFKC', text)
-    clean_text = re.sub(r'[\u200B-\u200D\uFEFF]', '', normalized_text)
-    
-    # 🚀 SCENARIO 11: ReDoS Protection (Truncate massive payloads)
-    if len(clean_text) > 1000:
-        clean_text = clean_text[:1000]
+def build_abuse_pattern(extra_words: list = None) -> re.Pattern:
+    all_words = list(BANNED_WORDS)
+    if extra_words:
+        all_words.extend(extra_words)
 
-    if BANNED_REGEX.search(clean_text):
-        return True, "Banned vocabulary detected."
-    
-    # Check for known spam/phishing domains
-    text_lower = clean_text.lower()
-    for domain in SPAM_DOMAINS:
-        if domain in text_lower:
-            return True, f"Spam domain detected: {domain}"
-            
-    return False, ""
+    escaped = [re.escape(w) for w in all_words if w.strip()]
+    if not escaped:
+        return re.compile(r"$^")
+    pattern = r"\b(" + "|".join(escaped) + r")\b"
+    return re.compile(pattern, re.IGNORECASE)
 
-async def is_inappropriate(text: str) -> tuple[bool, str]:
-    # 🚀 SCENARIO 11: Push heavy regex to background thread so async loop doesn't freeze
-    return await asyncio.to_thread(_sync_regex_scan, text)
+
+_default_pattern = build_abuse_pattern()
+
+
+def scan_for_abuse(text: str, custom_words: list = None) -> bool:
+    if not text:
+        return False
+
+    if custom_words:
+        pattern = build_abuse_pattern(custom_words)
+    else:
+        pattern = _default_pattern
+
+    return bool(pattern.search(text))
+
+
+def scan_for_spam(text: str) -> bool:
+    if not text:
+        return False
+    lower = text.lower()
+    return any(domain in lower for domain in SPAM_DOMAINS)

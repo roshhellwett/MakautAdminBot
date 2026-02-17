@@ -1,204 +1,247 @@
+import html
 import asyncio
-import traceback
 from cachetools import TTLCache
-from telegram import Update
-from telegram.constants import MessageEntityType
-from telegram.error import Forbidden, BadRequest, RetryAfter
-from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, CallbackQueryHandler, ChatMemberHandler, filters, ContextTypes
+from telegram import Update, ChatPermissions
+from telegram.ext import ContextTypes
+from telegram.error import BadRequest
 
-from zenith_group_bot.setup_flow import cmd_setup, cmd_start_dm, button_handler, cmd_deletegroup
-from zenith_group_bot.filters import is_inappropriate
-from zenith_group_bot.flood_control import is_flooding
-from zenith_group_bot.repository import init_group_db, MemberRepo, SettingsRepo, GroupRepo
-from core.task_manager import fire_and_forget
 from core.logger import setup_logger
-from core.config import GROUP_BOT_TOKEN
+from zenith_crypto_bot.repository import SubscriptionRepo
+from zenith_group_bot.repository import (
+    SettingsRepo, GroupRepo, MemberRepo, CustomWordRepo,
+    WelcomeRepo, AuditLogRepo,
+)
+from zenith_group_bot.filters import scan_for_abuse, scan_for_spam
+from zenith_group_bot.flood_control import is_flooding
+from zenith_group_bot.pro_handlers import is_raid_mode
 
-logger = setup_logger("GROUP_BOT")
-_group_app = None
+logger = setup_logger("GROUP_APP")
 
-admin_cache = TTLCache(maxsize=1000, ttl=900)
-global_message_semaphore = asyncio.Semaphore(25)
+_permission_errors = TTLCache(maxsize=1000, ttl=60)
+_admin_cache = TTLCache(maxsize=5000, ttl=300)
 
-async def is_user_admin(context: ContextTypes.DEFAULT_TYPE, chat_id: int, user_id: int) -> bool:
+
+async def _is_admin_cached(chat_id: int, user_id: int, context) -> bool:
     cache_key = f"{chat_id}_{user_id}"
-    if cache_key in admin_cache: return admin_cache[cache_key]
+    if cache_key in _admin_cache:
+        return _admin_cache[cache_key]
     try:
         member = await context.bot.get_chat_member(chat_id, user_id)
         is_admin = member.status in ["administrator", "creator"]
-        admin_cache[cache_key] = is_admin
+        _admin_cache[cache_key] = is_admin
         return is_admin
-    except Exception: return False
+    except Exception:
+        return False
 
-async def safe_delete(msg):
-    # 🚀 FAANG FIX: Extreme Raid Deletion Guarantee. 
-    # If a raid hits and Telegram throttles us, we sleep dynamically and force the deletion through.
-    for attempt in range(3):
-        try: 
-            await msg.delete()
-            break
-        except RetryAfter as e:
-            logger.warning(f"🛡️ Deletion Throttled by Telegram. Sleeping {e.retry_after}s to ensure spam is killed.")
-            await asyncio.sleep(e.retry_after + 0.1)
-        except BadRequest as e:
-            if "message to delete not found" in str(e).lower(): break
-            raise
-        except Exception:
-            break
 
-async def safe_send(context, chat_id, text, **kwargs):
-    async with global_message_semaphore:
-        try:
-            msg = await context.bot.send_message(chat_id=chat_id, text=text, **kwargs)
-            await asyncio.sleep(0.04)
-            return msg
-        except Exception: return None
+async def _get_ban_threshold(strength: str) -> int:
+    return {"low": 5, "medium": 3, "high": 2}.get(strength, 3)
 
-async def trigger_circuit_breaker(e: Exception, chat_id: int, owner_id: int, group_name: str, context: ContextTypes.DEFAULT_TYPE):
-    if "rights" in str(e).lower() or "permission" in str(e).lower():
-        await SettingsRepo.upsert_settings(chat_id, owner_id, None, is_active=False)
-        alert = f"🚨 <b>CIRCUIT BREAKER TRIGGERED</b>\nZenith's admin permissions were revoked in <b>{group_name}</b>. Monitoring has been halted to prevent bot crashes."
-        await safe_send(context, owner_id, alert, parse_mode="HTML")
 
-async def animate_and_delete(context: ContextTypes.DEFAULT_TYPE, message, seconds: int = 5):
+async def _try_delete(message, chat_id: int) -> bool:
+    error_key = f"perm_{chat_id}"
+    if _permission_errors.get(error_key, 0) >= 3:
+        return False
     try:
-        await asyncio.sleep(seconds)
-        if message: await safe_delete(message)
-    except Exception: pass
+        await message.delete()
+        return True
+    except BadRequest as e:
+        if "not enough rights" in str(e).lower() or "message can't be deleted" in str(e).lower():
+            count = _permission_errors.get(error_key, 0)
+            _permission_errors[error_key] = count + 1
+            if count + 1 >= 3:
+                logger.warning(f"⚡ Circuit breaker tripped for chat {chat_id}. Pausing deletions.")
+        return False
+    except Exception:
+        return False
 
-async def notify_owner(context: ContextTypes.DEFAULT_TYPE, chat_id: int, owner_id: int, group_name: str, username: str, reason: str, action: str):
-    alert_text = f"🚨 <b>Zenith Security Alert</b>\n<b>Group:</b> {group_name}\n<b>User:</b> @{username}\n<b>Action:</b> {action}\n<b>Reason:</b> {reason}"
+
+async def _notify_owner(settings, context, user, reason: str):
     try:
-        await context.bot.send_message(chat_id=owner_id, text=alert_text, parse_mode="HTML")
-    except Forbidden:
-        fallback_text = f"🚨 <a href='tg://user?id={owner_id}'>Admin</a>, I caught a rule violation by @{username} but couldn't DM you because you blocked me! Please unblock me."
-        await safe_send(context, chat_id, fallback_text, parse_mode="HTML")
-    except Exception: pass
+        await context.bot.send_message(
+            chat_id=settings.owner_id,
+            text=(
+                f"🚨 <b>VIOLATION DETECTED</b>\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"<b>Group:</b> <code>{html.escape(settings.group_name or str(settings.chat_id))}</code>\n"
+                f"<b>User:</b> {html.escape(user.first_name or '')} (<code>{user.id}</code>)\n"
+                f"<b>Reason:</b> {html.escape(reason)}\n"
+            ),
+            parse_mode="HTML",
+        )
+    except Exception:
+        pass
 
-async def cmd_forgive(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    user_id = update.effective_user.id
-    if update.effective_chat.type == "private": return
-    if not await is_user_admin(context, chat_id, user_id): return
-    if not update.message.reply_to_message: return await update.message.reply_text("⚠️ You must reply to the user's message to forgive them.")
-        
-    target_user = update.message.reply_to_message.from_user
-    if target_user.is_bot: return
 
-    await GroupRepo.forgive_user(target_user.id, chat_id)
-    try: await context.bot.unban_chat_member(chat_id, target_user.id, only_if_banned=True)
-    except Exception: pass
-    await update.message.reply_text(f"✅ <b>Pardoned:</b> @{target_user.username}'s strike history has been wiped.", parse_mode="HTML")
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.message
+    if not msg or not msg.from_user:
+        return
 
-async def my_chat_member_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    result = update.my_chat_member
-    if result.new_chat_member.status in ["left", "kicked", "banned"]:
-        chat_id = result.chat.id
-        settings = await SettingsRepo.get_settings(chat_id)
-        if settings and settings.is_active:
-            await SettingsRepo.upsert_settings(chat_id, settings.owner_id, None, is_active=False)
-            await safe_send(context, settings.owner_id, f"⚠️ I was removed from <b>{result.chat.title}</b>. Monitoring paused.", parse_mode="HTML")
+    chat_id = msg.chat_id
+    user = msg.from_user
+    user_id = user.id
 
-async def handle_new_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    for member in update.message.new_chat_members:
-        if member.id == context.bot.id:
-            msg = "🛡️ <b>Zenith Group BOT has arrived.</b>\n\nTo activate:\n1. Promote me to <b>Administrator</b>.\n2. Type <code>/setup</code>"
-            await safe_send(context, chat_id, msg, parse_mode="HTML")
-            return 
+    if msg.chat.type not in ("group", "supergroup"):
+        return
+
+    if user.is_bot or await _is_admin_cached(chat_id, user_id, context):
+        return
 
     settings = await SettingsRepo.get_settings(chat_id)
-    if not settings or not settings.is_active: return
+    if not settings or not settings.is_active:
+        return
 
-    try: await update.message.delete()
-    except Exception: pass 
+    text = msg.text or msg.caption or ""
+    features = settings.features or "both"
+    strength = settings.strength or "medium"
+    ban_threshold = await _get_ban_threshold(strength)
+    username = user.username or ""
 
-    for member in update.message.new_chat_members:
-        if not member.is_bot: await MemberRepo.register_new_member(member.id, chat_id)
+    if is_raid_mode(chat_id):
+        if not await _is_admin_cached(chat_id, user_id, context):
+            if await _try_delete(msg, chat_id):
+                await AuditLogRepo.log_action(chat_id, user_id, username, "DELETED", "Anti-raid lockdown", context.bot.id)
+            return
 
-async def group_monitor_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        msg = update.message or update.edited_message
-        if not msg or msg.from_user.is_bot: return
+    is_restricted = await MemberRepo.is_restricted(user_id, chat_id)
+    if is_restricted:
+        has_link = msg.entities and any(e.type in ("url", "text_link") for e in msg.entities)
+        has_media = bool(msg.photo or msg.video or msg.document or msg.animation or msg.sticker)
+        if has_link or has_media:
+            if await _try_delete(msg, chat_id):
+                await AuditLogRepo.log_action(chat_id, user_id, username, "QUARANTINE", "New member link/media block", context.bot.id)
+                await _notify_owner(settings, context, user, "New member tried to send link/media (quarantine)")
+            return
 
-        if msg.is_automatic_forward or msg.from_user.id == 1087968824: return
-        if msg.sender_chat: return 
+    if features in ("spam", "both") and text:
+        if scan_for_spam(text):
+            if await _try_delete(msg, chat_id):
+                strikes = await GroupRepo.process_violation(user_id, chat_id)
+                await AuditLogRepo.log_action(chat_id, user_id, username, "DELETED", f"Spam link detected (strike {strikes})", context.bot.id)
+                if strikes >= ban_threshold:
+                    try:
+                        await context.bot.ban_chat_member(chat_id, user_id)
+                        await AuditLogRepo.log_action(chat_id, user_id, username, "BANNED", f"Strike threshold ({ban_threshold}) reached", context.bot.id)
+                    except Exception:
+                        pass
+                await _notify_owner(settings, context, user, f"Spam link (Strike {strikes})")
+            return
 
-        user = msg.from_user
-        chat_id = update.effective_chat.id
-        
-        settings = await SettingsRepo.get_settings(chat_id)
-        if not settings or not settings.is_active: return
+    if features in ("abuse", "both") and text:
+        custom_words = None
+        owner_is_pro = await SubscriptionRepo.is_pro(settings.owner_id)
+        if owner_is_pro:
+            custom_words = await CustomWordRepo.get_words(chat_id)
 
-        if await is_user_admin(context, chat_id, user.id): return
+        if scan_for_abuse(text, custom_words=custom_words):
+            if await _try_delete(msg, chat_id):
+                strikes = await GroupRepo.process_violation(user_id, chat_id)
+                await AuditLogRepo.log_action(chat_id, user_id, username, "DELETED", f"Abuse/profanity detected (strike {strikes})", context.bot.id)
+                if strikes >= ban_threshold:
+                    try:
+                        await context.bot.ban_chat_member(chat_id, user_id)
+                        await AuditLogRepo.log_action(chat_id, user_id, username, "BANNED", f"Strike threshold ({ban_threshold}) reached", context.bot.id)
+                    except Exception:
+                        pass
+                await _notify_owner(settings, context, user, f"Abuse detected (Strike {strikes})")
+            return
 
-        hidden_urls = []
-        for ent in (msg.entities or []) + (msg.caption_entities or []):
-            if ent.type in [MessageEntityType.TEXT_LINK] and ent.url:
-                hidden_urls.append(ent.url)
-        
-        raw_text = msg.text or msg.caption or ""
-        text_to_scan = raw_text + " " + " ".join(hidden_urls)
+    flooding, flood_reason = is_flooding(user_id, getattr(msg, "media_group_id", None), strength)
+    if flooding:
+        if await _try_delete(msg, chat_id):
+            strikes = await GroupRepo.process_violation(user_id, chat_id)
+            await AuditLogRepo.log_action(chat_id, user_id, username, "DELETED", f"Flood/spam (strike {strikes})", context.bot.id)
+            if strikes >= ban_threshold:
+                try:
+                    await context.bot.ban_chat_member(chat_id, user_id)
+                    await AuditLogRepo.log_action(chat_id, user_id, username, "BANNED", f"Flood + strike threshold", context.bot.id)
+                except Exception:
+                    pass
+            await _notify_owner(settings, context, user, f"Flooding (Strike {strikes})")
 
-        # 1. Anti-Raid / Quarantine Logic
-        if settings.features in ["spam", "both"] and await MemberRepo.is_restricted(user.id, chat_id):
-            has_media = bool(msg.photo or msg.video or msg.document or msg.audio or msg.sticker or msg.animation)
-            has_link = any(e.type in [MessageEntityType.URL, MessageEntityType.TEXT_LINK] for e in (msg.entities or []) + (msg.caption_entities or []))
-            if has_media or has_link:
-                try: 
-                    await safe_delete(msg)
-                    alert = await safe_send(context, chat_id, f"🛡️ <b>Anti-Raid Active:</b>\n@{user.username}, new members cannot send links/media for 24 hours.", parse_mode="HTML")
-                    fire_and_forget(animate_and_delete(context, alert, seconds=5))
-                    await notify_owner(context, chat_id, settings.owner_id, settings.group_name, user.username, "Quarantine Link/Media Attempt", "Deleted")
-                except BadRequest as e: 
-                    await trigger_circuit_breaker(e, chat_id, settings.owner_id, settings.group_name, context)
-                return 
 
-        # 2. Main Filtering Logic
-        violation, reason = False, ""
-        if settings.features in ["abuse", "both"]:
-            violation, reason = await is_inappropriate(text_to_scan) 
-        
-        if settings.features in ["spam", "both"] and not violation and raw_text: 
-            violation, reason = is_flooding(user.id, msg.media_group_id, strength=settings.strength)
-    
-        if violation:
+async def handle_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.message
+    if not msg or not msg.new_chat_members:
+        return
+
+    chat_id = msg.chat_id
+    settings = await SettingsRepo.get_settings(chat_id)
+    if not settings or not settings.is_active:
+        return
+
+    for member in msg.new_chat_members:
+        if member.is_bot:
+            continue
+
+        if is_raid_mode(chat_id):
             try:
-                await safe_delete(msg)
-                strikes = await GroupRepo.process_violation(user.id, chat_id)
-                # Ban threshold varies by group strength setting
-                ban_thresholds = {"low": 5, "medium": 3, "strict": 1}
-                ban_limit = ban_thresholds.get(settings.strength, 3)
-                if strikes >= ban_limit:
-                    await context.bot.ban_chat_member(chat_id, user.id)
-                    alert = await safe_send(context, chat_id, f"🚨 <b>BANNED:</b> @{user.username} for repeated violations.", parse_mode="HTML")
-                    await notify_owner(context, chat_id, settings.owner_id, settings.group_name, user.username, reason, "BANNED")
-                else:
-                    alert = await safe_send(context, chat_id, f"🛡️ <b>WARNING:</b> @{user.username}, message deleted. Strike {strikes}/{ban_limit}.", parse_mode="HTML")
-                    await notify_owner(context, chat_id, settings.owner_id, settings.group_name, user.username, reason, f"Deleted (Strike {strikes})")
-                
-                fire_and_forget(animate_and_delete(context, alert, seconds=5))
-            except BadRequest as e:
-                await trigger_circuit_breaker(e, chat_id, settings.owner_id, settings.group_name, context)
-                
-    except Exception as e:
-        logger.error(f"POISON PILL CAUGHT: {e}\n{traceback.format_exc()}")
+                await context.bot.restrict_chat_member(
+                    chat_id, member.id,
+                    permissions=ChatPermissions(can_send_messages=False),
+                )
+                await AuditLogRepo.log_action(chat_id, member.id, member.username, "QUARANTINE", "Anti-raid: auto-restricted on join", context.bot.id)
+            except Exception:
+                pass
+            continue
 
-async def setup_group_app():
-    if not GROUP_BOT_TOKEN:
-        logger.warning("⚠️ GROUP_BOT_TOKEN missing! Group Service disabled.")
-        return None
-    await init_group_db()
+        await MemberRepo.register_new_member(member.id, chat_id)
 
-    app = ApplicationBuilder().token(GROUP_BOT_TOKEN).build()
-    
-    app.add_handler(CommandHandler("start", cmd_start_dm))
-    app.add_handler(CommandHandler("setup", cmd_setup))
-    app.add_handler(CommandHandler("deletegroup", cmd_deletegroup))
-    app.add_handler(CommandHandler("forgive", cmd_forgive))
-    app.add_handler(CallbackQueryHandler(button_handler))
-    app.add_handler(ChatMemberHandler(my_chat_member_handler, ChatMemberHandler.MY_CHAT_MEMBER))
-    app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_members))
-    app.add_handler(MessageHandler(filters.ChatType.GROUPS & (~filters.COMMAND) & (~filters.StatusUpdate.ALL), group_monitor_handler))
+        owner_is_pro = await SubscriptionRepo.is_pro(settings.owner_id)
+        if owner_is_pro:
+            welcome_config = await WelcomeRepo.get_welcome(chat_id)
+            if welcome_config:
+                welcome_text = welcome_config.message_template.replace(
+                    "{name}", member.first_name or "there",
+                ).replace(
+                    "{username}", f"@{member.username}" if member.username else member.first_name or "there",
+                ).replace(
+                    "{group}", msg.chat.title or "our group",
+                )
+                try:
+                    if welcome_config.send_dm:
+                        await context.bot.send_message(chat_id=member.id, text=welcome_text, parse_mode="HTML")
+                    else:
+                        await msg.reply_text(welcome_text, parse_mode="HTML")
+                except Exception as e:
+                    logger.debug(f"Welcome send failed: {e}")
 
-    return app
+
+async def cmd_forgive(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat.type not in ("group", "supergroup"):
+        return
+    if not await _is_admin_cached(update.effective_chat.id, update.effective_user.id, context):
+        return await update.message.reply_text("⛔ Admin only.")
+
+    target_id = None
+    if update.message.reply_to_message:
+        target_id = update.message.reply_to_message.from_user.id
+    elif context.args:
+        try:
+            target_id = int(context.args[0])
+        except ValueError:
+            return await update.message.reply_text("⚠️ Invalid user ID.")
+
+    if not target_id:
+        return await update.message.reply_text("⚠️ Reply to a user or provide their ID.")
+
+    forgiven = await GroupRepo.forgive_user(target_id, update.effective_chat.id)
+    await update.message.reply_text("✅ Strikes cleared." if forgiven else "⚠️ No strikes found for this user.")
+
+
+async def cmd_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat.type == "private":
+        return await update.message.reply_text("⚠️ Use this in the group you want to reset.")
+    if not await _is_admin_cached(update.effective_chat.id, update.effective_user.id, context):
+        return await update.message.reply_text("⛔ Admin only.")
+
+    settings = await SettingsRepo.get_settings(update.effective_chat.id)
+    if not settings:
+        return await update.message.reply_text("⚠️ This group is not configured.")
+    if update.effective_user.id != settings.owner_id:
+        return await update.message.reply_text("⛔ Only the group owner can reset.")
+
+    wiped = await SettingsRepo.wipe_group_container(update.effective_chat.id, update.effective_user.id)
+    msg = "✅ Group data wiped. Run /setup to reconfigure." if wiped else "⚠️ Reset failed."
+    await update.message.reply_text(msg)

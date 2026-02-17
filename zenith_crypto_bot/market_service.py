@@ -1,7 +1,3 @@
-"""
-Zenith Market Service — Centralized External API Client
-Handles all external data: CoinGecko, GoPlus, Etherscan, Fear & Greed, Gas
-"""
 import os
 import httpx
 from typing import Optional
@@ -16,32 +12,9 @@ GOPLUS_BASE = "https://api.gopluslabs.io/api/v1"
 ETHERSCAN_BASE = "https://api.etherscan.io/api"
 FEAR_GREED_URL = "https://api.alternative.me/fng/?limit=1"
 
-# ==========================================
-# 🔧 HTTP Client Management
-# ==========================================
+UNISWAP_V2_FACTORY = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f"
+PAIR_CREATED_TOPIC = "0x0d3648bd0f6ba80134a33ba9275ac585d9d315f0ad8355cddefde31afa28d0e9"
 
-def get_http_client() -> httpx.AsyncClient:
-    global _http_client
-    if _http_client is None:
-        _http_client = httpx.AsyncClient(
-            timeout=15.0,
-            limits=httpx.Limits(max_keepalive_connections=20, max_connections=30),
-            headers={"Accept": "application/json"}
-        )
-    return _http_client
-
-async def close_market_client():
-    global _http_client
-    if _http_client:
-        await _http_client.aclose()
-        _http_client = None
-
-
-# ==========================================
-# 💰 CoinGecko — Price Data
-# ==========================================
-
-# Map common symbols to CoinGecko IDs
 SYMBOL_TO_ID = {
     "btc": "bitcoin", "eth": "ethereum", "sol": "solana", "bnb": "binancecoin",
     "xrp": "ripple", "ada": "cardano", "doge": "dogecoin", "dot": "polkadot",
@@ -56,15 +29,31 @@ SYMBOL_TO_ID = {
     "bonk": "bonk", "floki": "floki",
 }
 
+
+def get_http_client() -> httpx.AsyncClient:
+    global _http_client
+    if _http_client is None:
+        _http_client = httpx.AsyncClient(
+            timeout=15.0,
+            limits=httpx.Limits(max_keepalive_connections=20, max_connections=30),
+            headers={"Accept": "application/json"},
+        )
+    return _http_client
+
+
+async def close_market_client():
+    global _http_client
+    if _http_client:
+        await _http_client.aclose()
+        _http_client = None
+
+
 def resolve_token_id(symbol_or_id: str) -> str:
-    """Resolve a user-provided symbol to a CoinGecko token ID."""
     key = symbol_or_id.lower().strip()
     return SYMBOL_TO_ID.get(key, key)
 
+
 async def get_prices(token_ids: list[str]) -> dict:
-    """Fetch current USD prices for a list of CoinGecko token IDs.
-    Returns dict: {token_id: {"usd": price, "usd_24h_change": change}}
-    """
     if not token_ids:
         return {}
     client = get_http_client()
@@ -72,7 +61,7 @@ async def get_prices(token_ids: list[str]) -> dict:
     try:
         resp = await client.get(
             f"{COINGECKO_BASE}/simple/price",
-            params={"ids": ids_str, "vs_currencies": "usd", "include_24hr_change": "true"}
+            params={"ids": ids_str, "vs_currencies": "usd", "include_24hr_change": "true"},
         )
         resp.raise_for_status()
         return resp.json()
@@ -80,8 +69,8 @@ async def get_prices(token_ids: list[str]) -> dict:
         logger.error(f"CoinGecko price fetch failed: {e}")
         return {}
 
+
 async def get_top_movers() -> tuple[list, list]:
-    """Get top 10 gainers and losers from CoinGecko."""
     client = get_http_client()
     try:
         resp = await client.get(
@@ -89,8 +78,8 @@ async def get_top_movers() -> tuple[list, list]:
             params={
                 "vs_currency": "usd", "order": "market_cap_desc",
                 "per_page": 100, "page": 1, "sparkline": "false",
-                "price_change_percentage": "24h"
-            }
+                "price_change_percentage": "24h",
+            },
         )
         resp.raise_for_status()
         data = resp.json()
@@ -102,8 +91,8 @@ async def get_top_movers() -> tuple[list, list]:
         logger.error(f"CoinGecko top movers failed: {e}")
         return [], []
 
+
 async def search_token(query: str) -> dict | None:
-    """Search CoinGecko for a token by name/symbol. Returns first match."""
     client = get_http_client()
     try:
         resp = await client.get(f"{COINGECKO_BASE}/search", params={"query": query})
@@ -117,36 +106,23 @@ async def search_token(query: str) -> dict | None:
     return None
 
 
-# ==========================================
-# 🛡️ GoPlus — Token Security Analysis
-# ==========================================
-
 async def get_token_security(contract: str, chain_id: str = "1") -> dict | None:
-    """Fetch real security data from GoPlus Security API.
-    chain_id: 1=ETH, 56=BSC, 137=Polygon, etc.
-    """
     client = get_http_client()
     try:
         resp = await client.get(
             f"{GOPLUS_BASE}/token_security/{chain_id}",
-            params={"contract_addresses": contract.lower()}
+            params={"contract_addresses": contract.lower()},
         )
         resp.raise_for_status()
         data = resp.json()
         result = data.get("result", {})
-        token_data = result.get(contract.lower())
-        return token_data
+        return result.get(contract.lower())
     except Exception as e:
         logger.error(f"GoPlus security scan failed: {e}")
         return None
 
 
-# ==========================================
-# 🔍 Etherscan — Wallet Tracking
-# ==========================================
-
 async def get_wallet_recent_txns(wallet_address: str, last_known_hash: str = None) -> list[dict]:
-    """Fetch recent transactions for a wallet from Etherscan. Returns new txns since last_known_hash."""
     if not ETHERSCAN_API_KEY:
         return []
     client = get_http_client()
@@ -157,8 +133,8 @@ async def get_wallet_recent_txns(wallet_address: str, last_known_hash: str = Non
                 "module": "account", "action": "txlist",
                 "address": wallet_address, "startblock": 0, "endblock": 99999999,
                 "page": 1, "offset": 10, "sort": "desc",
-                "apikey": ETHERSCAN_API_KEY
-            }
+                "apikey": ETHERSCAN_API_KEY,
+            },
         )
         resp.raise_for_status()
         data = resp.json()
@@ -177,8 +153,8 @@ async def get_wallet_recent_txns(wallet_address: str, last_known_hash: str = Non
         logger.error(f"Etherscan wallet fetch failed: {e}")
         return []
 
+
 async def get_wallet_token_txns(wallet_address: str) -> list[dict]:
-    """Fetch recent ERC-20 token transfers for a wallet."""
     if not ETHERSCAN_API_KEY:
         return []
     client = get_http_client()
@@ -188,8 +164,8 @@ async def get_wallet_token_txns(wallet_address: str) -> list[dict]:
             params={
                 "module": "account", "action": "tokentx",
                 "address": wallet_address, "page": 1, "offset": 5, "sort": "desc",
-                "apikey": ETHERSCAN_API_KEY
-            }
+                "apikey": ETHERSCAN_API_KEY,
+            },
         )
         resp.raise_for_status()
         data = resp.json()
@@ -201,12 +177,7 @@ async def get_wallet_token_txns(wallet_address: str) -> list[dict]:
         return []
 
 
-# ==========================================
-# 📊 Market Sentiment — Fear & Greed
-# ==========================================
-
 async def get_fear_greed_index() -> dict | None:
-    """Fetch the Crypto Fear & Greed Index from Alternative.me."""
     client = get_http_client()
     try:
         resp = await client.get(FEAR_GREED_URL)
@@ -216,37 +187,30 @@ async def get_fear_greed_index() -> dict | None:
         return {
             "value": int(entry.get("value", 0)),
             "classification": entry.get("value_classification", "Unknown"),
-            "timestamp": entry.get("timestamp", "")
+            "timestamp": entry.get("timestamp", ""),
         }
     except Exception as e:
         logger.error(f"Fear & Greed API failed: {e}")
         return None
 
 
-# ==========================================
-# ⛽ Gas Tracker — Ethereum
-# ==========================================
-
 async def get_gas_prices() -> dict | None:
-    """Fetch current Ethereum gas prices via Alchemy RPC."""
     if not ETH_RPC_URL:
         return None
     client = get_http_client()
     try:
-        # Get current gas price
         resp = await client.post(
             ETH_RPC_URL,
-            json={"jsonrpc": "2.0", "method": "eth_gasPrice", "params": [], "id": 1}
+            json={"jsonrpc": "2.0", "method": "eth_gasPrice", "params": [], "id": 1},
         )
         resp.raise_for_status()
         hex_gas = resp.json().get("result", "0x0")
         gas_wei = int(hex_gas, 16)
         gas_gwei = gas_wei / 1e9
 
-        # Get latest block for base fee
         resp2 = await client.post(
             ETH_RPC_URL,
-            json={"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["latest", False], "id": 2}
+            json={"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["latest", False], "id": 2},
         )
         resp2.raise_for_status()
         block = resp2.json().get("result", {})
@@ -265,34 +229,21 @@ async def get_gas_prices() -> dict | None:
         return None
 
 
-# ==========================================
-# 🆕 New Pair Scanner — Uniswap V2
-# ==========================================
-
-UNISWAP_V2_FACTORY = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f"
-# PairCreated event signature
-PAIR_CREATED_TOPIC = "0x0d3648bd0f6ba80134a33ba9275ac585d9d315f0ad8355cddefde31afa28d0e9"
-
 async def get_new_pairs(from_block: int = None) -> tuple[list[dict], int]:
-    """Scan Uniswap V2 Factory for new PairCreated events.
-    Returns (list of new pairs, latest block number).
-    """
     if not ETH_RPC_URL:
         return [], 0
     client = get_http_client()
     try:
-        # Get latest block number
         resp = await client.post(
             ETH_RPC_URL,
-            json={"jsonrpc": "2.0", "method": "eth_blockNumber", "params": [], "id": 1}
+            json={"jsonrpc": "2.0", "method": "eth_blockNumber", "params": [], "id": 1},
         )
         resp.raise_for_status()
         latest_block = int(resp.json().get("result", "0x0"), 16)
 
         if from_block is None:
-            from_block = latest_block - 50  # Last ~50 blocks (~10 minutes)
+            from_block = latest_block - 50
 
-        # Get PairCreated logs
         resp2 = await client.post(
             ETH_RPC_URL,
             json={
@@ -302,26 +253,27 @@ async def get_new_pairs(from_block: int = None) -> tuple[list[dict], int]:
                     "address": UNISWAP_V2_FACTORY,
                     "topics": [PAIR_CREATED_TOPIC],
                     "fromBlock": hex(from_block),
-                    "toBlock": hex(latest_block)
+                    "toBlock": hex(latest_block),
                 }],
-                "id": 2
-            }
+                "id": 2,
+            },
         )
         resp2.raise_for_status()
         logs = resp2.json().get("result", [])
 
         pairs = []
-        for log in logs[-5:]:  # Only report last 5 to avoid spam
+        for log in logs[-5:]:
             topics = log.get("topics", [])
             if len(topics) >= 3:
                 token0 = "0x" + topics[1][-40:]
                 token1 = "0x" + topics[2][-40:]
                 pair_address = "0x" + log.get("data", "")[26:66] if log.get("data") else "unknown"
                 pairs.append({
-                    "token0": token0, "token1": token1,
+                    "token0": token0,
+                    "token1": token1,
                     "pair": pair_address,
                     "block": int(log.get("blockNumber", "0x0"), 16),
-                    "tx_hash": log.get("transactionHash", "")
+                    "tx_hash": log.get("transactionHash", ""),
                 })
         return pairs, latest_block
     except Exception as e:

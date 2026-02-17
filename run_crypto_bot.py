@@ -1,7 +1,3 @@
-"""
-Zenith Crypto Bot — Main Service Entry Point
-Handles lifecycle, webhook, background loops, and routes to handler modules.
-"""
 import html
 import random
 import asyncio
@@ -17,20 +13,20 @@ from core.config import CRYPTO_BOT_TOKEN, WEBHOOK_URL, WEBHOOK_SECRET, ADMIN_USE
 from core.task_manager import fire_and_forget
 from zenith_crypto_bot.repository import (
     init_crypto_db, dispose_crypto_engine, SubscriptionRepo,
-    PriceAlertRepo, WalletTrackerRepo
+    PriceAlertRepo, WalletTrackerRepo,
 )
 from zenith_crypto_bot.ui import (
     get_main_dashboard, get_back_button, get_audits_keyboard,
-    get_welcome_msg, get_alerts_keyboard, get_wallets_keyboard
+    get_welcome_msg, get_alerts_keyboard, get_wallets_keyboard,
 )
 from zenith_crypto_bot.market_service import (
-    get_prices, get_wallet_recent_txns, get_new_pairs, close_market_client
+    get_prices, get_wallet_recent_txns, get_new_pairs, close_market_client,
 )
 from zenith_crypto_bot.pro_handlers import (
     cmd_alert, cmd_alerts, cmd_delalert,
     cmd_track, cmd_wallets, cmd_untrack,
     cmd_addtoken, cmd_portfolio, cmd_removetoken,
-    cmd_market, cmd_gas, perform_real_audit, show_new_pairs
+    cmd_market, cmd_gas, perform_real_audit, show_new_pairs,
 )
 
 logger = setup_logger("CRYPTO")
@@ -39,21 +35,22 @@ bot_app = None
 alert_queue = asyncio.Queue(maxsize=500)
 background_tasks = set()
 
+
 def track_task(task):
     background_tasks.add(task)
     task.add_done_callback(background_tasks.discard)
 
+
 async def safe_loop(name, coro):
     while True:
-        try: await coro()
-        except asyncio.CancelledError: break
+        try:
+            await coro()
+        except asyncio.CancelledError:
+            break
         except Exception as e:
             logger.error(f"Loop '{name}' crashed: {e}")
             await asyncio.sleep(5)
 
-# ==========================================
-# 📡 CORE COMMANDS
-# ==========================================
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -63,8 +60,9 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     is_pro = days_left > 0
     await update.message.reply_text(
         get_welcome_msg(first_name, is_pro, days_left),
-        reply_markup=get_main_dashboard(is_pro), parse_mode="HTML"
+        reply_markup=get_main_dashboard(is_pro), parse_mode="HTML",
     )
+
 
 async def cmd_keygen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_USER_ID:
@@ -76,6 +74,7 @@ async def cmd_keygen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     key = await SubscriptionRepo.generate_key(days)
     await update.message.reply_text(f"🔑 <b>Key Generated:</b> <code>{key}</code>\nDuration: <b>{days} days</b>", parse_mode="HTML")
 
+
 async def cmd_activate(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         return await update.message.reply_text("⚠️ <b>Invalid Format.</b> Use: <code>/activate [YOUR_KEY]</code>", parse_mode="HTML")
@@ -83,8 +82,8 @@ async def cmd_activate(update: Update, context: ContextTypes.DEFAULT_TYPE):
     success, msg = await SubscriptionRepo.redeem_key(update.effective_user.id, key_string)
     await update.message.reply_text(msg, parse_mode="HTML")
 
+
 async def cmd_extend(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Admin only: /extend <user_id> [days] — renew a user's Pro without generating a key."""
     if update.effective_user.id != ADMIN_USER_ID:
         return await update.message.reply_text("⛔ Unauthorized.")
     if not context.args:
@@ -92,7 +91,7 @@ async def cmd_extend(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "⚠️ <b>Usage:</b> <code>/extend [USER_ID] [DAYS]</code>\n"
             "Example: <code>/extend 123456789 30</code>\n\n"
             "<i>Defaults to 30 days if DAYS is omitted.</i>",
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
     try:
         target_user_id = int(context.args[0])
@@ -106,7 +105,6 @@ async def cmd_extend(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return await update.message.reply_text("⚠️ Invalid day count.")
     success, msg = await SubscriptionRepo.extend_subscription(target_user_id, days)
     await update.message.reply_text(msg, parse_mode="HTML")
-    # Notify the user that their subscription was extended
     if success:
         try:
             await bot_app.bot.send_message(
@@ -118,17 +116,18 @@ async def cmd_extend(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"Enjoy uninterrupted access to all Pro features!\n\n"
                     f"<i>Type /start to open your terminal.</i>"
                 ),
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
         except Exception:
-            pass  # User may have blocked the bot
+            pass
+
 
 async def cmd_audit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         return await update.message.reply_text(
             "🔍 <b>Token Security Scanner</b>\n\nScan any ERC-20 contract for vulnerabilities:\n"
             "<code>/audit 0x6982508145454Ce325dDbE47a25d4ec3d2311933</code>",
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
     contract = context.args[0][:100].strip()
     user_id = update.effective_user.id
@@ -137,24 +136,20 @@ async def cmd_audit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await perform_real_audit(user_id, contract, msg, is_pro)
 
 
-# ==========================================
-# 📡 DASHBOARD CALLBACK HANDLER
-# ==========================================
-
 async def handle_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    
+
     user_id = update.effective_user.id
     first_name = html.escape(update.effective_user.first_name or "Trader")
     days_left = await SubscriptionRepo.get_days_left(user_id)
     is_pro = days_left > 0
-    
+
     try:
         if query.data == "ui_main_menu":
             await query.edit_message_text(
                 get_welcome_msg(first_name, is_pro, days_left),
-                reply_markup=get_main_dashboard(is_pro), parse_mode="HTML"
+                reply_markup=get_main_dashboard(is_pro), parse_mode="HTML",
             )
 
         elif query.data == "ui_pro_info":
@@ -174,7 +169,7 @@ async def handle_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"<b>Status:</b> {status}\n{pro_features}\n"
                 f"<b>Activation:</b>\n<code>/activate ZENITH-XXXX-XXXX</code>\n\n"
                 f"<i>Account ID: {user_id}</i>",
-                reply_markup=get_back_button(), parse_mode="HTML"
+                reply_markup=get_back_button(), parse_mode="HTML",
             )
 
         elif query.data == "ui_whale_radar":
@@ -186,21 +181,21 @@ async def handle_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "⚡ <b>PRO ORDERFLOW: ONLINE</b>\n\n"
                     "Monitoring mempool for institutional trades ($1M+).\n"
                     "<i>Leave chat open for live signals.</i>",
-                    reply_markup=get_back_button(), parse_mode="HTML"
+                    reply_markup=get_back_button(), parse_mode="HTML",
                 )
             else:
                 await query.edit_message_text(
                     "📊 <b>STANDARD ORDERFLOW: ONLINE</b>\n\n"
                     "Receiving delayed mid-cap volume.\n"
                     "<i>Upgrade to Pro for real-time + unredacted data.</i>",
-                    reply_markup=get_back_button(), parse_mode="HTML"
+                    reply_markup=get_back_button(), parse_mode="HTML",
                 )
 
         elif query.data == "ui_audit":
             await query.edit_message_text(
                 "🔍 <b>Token Security Scanner</b>\n\nScan any contract for vulnerabilities:\n"
                 "<code>/audit 0xYourContractAddressHere</code>",
-                reply_markup=get_back_button(), parse_mode="HTML"
+                reply_markup=get_back_button(), parse_mode="HTML",
             )
 
         elif query.data == "ui_saved_audits":
@@ -209,7 +204,7 @@ async def handle_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.edit_message_text("🗂️ <b>Audit Vault</b>\n\nEmpty. Run a scan: <code>/audit [contract]</code>", reply_markup=get_back_button(), parse_mode="HTML")
             else:
                 await query.edit_message_text("🗂️ <b>Audit Vault</b>\n\nSelect a record:", reply_markup=get_audits_keyboard(audits), parse_mode="HTML")
-                
+
         elif query.data.startswith("ui_del_audit_"):
             audit_id = int(query.data.split("_")[-1])
             await SubscriptionRepo.delete_audit(user_id, audit_id)
@@ -242,7 +237,7 @@ async def handle_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 kb = [
                     [InlineKeyboardButton("⚡ Trade (Uniswap)", url="https://app.uniswap.org/")],
-                    [InlineKeyboardButton("🔙 Terminal", callback_data="ui_main_menu")]
+                    [InlineKeyboardButton("🔙 Terminal", callback_data="ui_main_menu")],
                 ]
             else:
                 pulse = (
@@ -254,7 +249,6 @@ async def handle_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 kb = [[InlineKeyboardButton("🔙 Terminal", callback_data="ui_main_menu")]]
             await query.edit_message_text(pulse, reply_markup=InlineKeyboardMarkup(kb), parse_mode="HTML")
 
-        # --- NEW PRO DASHBOARD BUTTONS ---
         elif query.data == "ui_market":
             await query.edit_message_text("<i>Scanning global market sentiment...</i>", parse_mode="HTML")
             from zenith_crypto_bot.pro_handlers import _build_gauge
@@ -296,15 +290,19 @@ async def handle_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.edit_message_text("⚠️ Gas data unavailable.", reply_markup=get_back_button())
                 return
             gwei = gas["gas_gwei"]
-            if gwei < 15: lv = "🟢 LOW — Great time to trade"
-            elif gwei < 30: lv = "🟡 MODERATE"
-            elif gwei < 60: lv = "🟠 HIGH — Consider waiting"
-            else: lv = "🔴 VERY HIGH — Delay if possible"
+            if gwei < 15:
+                lv = "🟢 LOW — Great time to trade"
+            elif gwei < 30:
+                lv = "🟡 MODERATE"
+            elif gwei < 60:
+                lv = "🟠 HIGH — Consider waiting"
+            else:
+                lv = "🔴 VERY HIGH — Delay if possible"
             await query.edit_message_text(
                 f"<b>⛽ GAS TRACKER</b>\n━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                 f"<b>Gas:</b> {gwei:.1f} Gwei — {lv}\n<b>Base Fee:</b> {gas['base_fee_gwei']:.1f} Gwei\n\n"
                 f"<b>Priority:</b>\n🐢 {gas['priority_low']:.1f} | 🚶 {gas['priority_medium']:.1f} | 🚀 {gas['priority_high']:.1f} Gwei",
-                reply_markup=get_back_button(), parse_mode="HTML"
+                reply_markup=get_back_button(), parse_mode="HTML",
             )
 
         elif query.data == "ui_portfolio":
@@ -313,7 +311,7 @@ async def handle_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if not tokens:
                 await query.edit_message_text(
                     "💰 <b>Portfolio</b>\n\nEmpty. Add positions:\n<code>/addtoken BTC 95000 0.5</code>",
-                    reply_markup=get_back_button(), parse_mode="HTML"
+                    reply_markup=get_back_button(), parse_mode="HTML",
                 )
             else:
                 token_ids = [t.token_id for t in tokens]
@@ -325,7 +323,8 @@ async def handle_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     inv = t.entry_price * t.quantity
                     cur = cp * t.quantity
                     pnl = ((cp - t.entry_price) / t.entry_price * 100) if t.entry_price > 0 else 0
-                    total_inv += inv; total_cur += cur
+                    total_inv += inv
+                    total_cur += cur
                     ic = "🟢" if pnl >= 0 else "🔴"
                     lines.append(f"{ic} <b>{t.token_symbol}</b> ×{t.quantity}\n   ${t.entry_price:,.2f}→${cp:,.2f} ({pnl:+.1f}%)\n")
                 tp = total_cur - total_inv
@@ -338,7 +337,7 @@ async def handle_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if not alerts:
                 await query.edit_message_text(
                     "🔔 <b>Price Alerts</b>\n\nNo active alerts.\n<code>/alert BTC above 100000</code>",
-                    reply_markup=get_back_button(), parse_mode="HTML"
+                    reply_markup=get_back_button(), parse_mode="HTML",
                 )
             else:
                 await query.edit_message_text("🔔 <b>Your Alerts</b>", reply_markup=get_alerts_keyboard(alerts), parse_mode="HTML")
@@ -358,21 +357,20 @@ async def handle_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "🔒 <b>Pro Feature: Wallet Tracker</b>\n\n"
                     "Track whale wallets and get alerts when they trade.\n"
                     "<code>/activate [KEY]</code> to unlock.",
-                    reply_markup=get_back_button(), parse_mode="HTML"
+                    reply_markup=get_back_button(), parse_mode="HTML",
                 )
             else:
                 wallets = await WalletTrackerRepo.get_user_wallets(user_id)
                 if not wallets:
                     await query.edit_message_text(
                         "👁️ <b>Wallet Tracker</b>\n\nNo tracked wallets.\n<code>/track 0x... MyLabel</code>",
-                        reply_markup=get_back_button(), parse_mode="HTML"
+                        reply_markup=get_back_button(), parse_mode="HTML",
                     )
                 else:
                     await query.edit_message_text("👁️ <b>Tracked Wallets</b>", reply_markup=get_wallets_keyboard(wallets), parse_mode="HTML")
 
         elif query.data.startswith("ui_untrack_"):
             wid = int(query.data.split("_")[-1])
-            # Need to get wallet address from ID to delete
             wallets = await WalletTrackerRepo.get_user_wallets(user_id)
             for w in wallets:
                 if w.id == wid:
@@ -389,7 +387,7 @@ async def handle_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await show_new_pairs(query.message, is_pro)
 
         elif query.data.startswith("ui_noop"):
-            pass  # Informational buttons, no action
+            pass
 
     except RetryAfter as e:
         await asyncio.sleep(e.retry_after)
@@ -397,10 +395,6 @@ async def handle_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if "not modified" not in str(e).lower():
             logger.error(f"UI Error: {e}")
 
-
-# ==========================================
-# 🔄 BACKGROUND LOOPS
-# ==========================================
 
 async def alert_dispatcher():
     while True:
@@ -418,8 +412,8 @@ async def alert_dispatcher():
             alert_queue.task_done()
             await asyncio.sleep(0.05)
 
+
 async def price_alert_checker():
-    """Check all active price alerts against live prices every 60 seconds."""
     while True:
         await asyncio.sleep(60)
         try:
@@ -428,7 +422,7 @@ async def price_alert_checker():
                 continue
             token_ids = list(set(a.token_id for a in alerts))
             prices = await get_prices(token_ids)
-            
+
             for alert in alerts:
                 current = prices.get(alert.token_id, {}).get("usd")
                 if current is None:
@@ -455,8 +449,8 @@ async def price_alert_checker():
         except Exception as e:
             logger.error(f"Price alert checker error: {e}")
 
+
 async def wallet_watcher():
-    """Check tracked wallets for new transactions every 2 minutes."""
     while True:
         await asyncio.sleep(120)
         try:
@@ -483,22 +477,22 @@ async def wallet_watcher():
                             alert_queue.put_nowait((w.user_id, text))
                         except asyncio.QueueFull:
                             pass
-                await asyncio.sleep(0.5)  # Rate limit Etherscan
+                await asyncio.sleep(0.5)
         except Exception as e:
             logger.error(f"Wallet watcher error: {e}")
 
+
 async def active_blockchain_watcher():
-    """Simulated institutional whale transfer alerts."""
     scenarios = [
         ("Binance Deposit", "🔴 SELL PRESSURE: OTC liquidation on CEX."),
         ("Coinbase Hot Wallet", "🔴 SELL PRESSURE: Moving to exchange ledger."),
         ("Unknown DEX Route", "🟢 ACCUMULATION: Routed through DEX pools."),
         ("Wintermute OTC", "⚪ INSTITUTIONAL: Market maker restructuring."),
-        ("New Cold Storage", "🟢 ACCUMULATION: Moving to deep cold storage.")
+        ("New Cold Storage", "🟢 ACCUMULATION: Moving to deep cold storage."),
     ]
     coins = [("USDC", "Ethereum"), ("USDT", "Tron"), ("ETH", "Ethereum"), ("WBTC", "Ethereum"), ("SOL", "Solana")]
     explorer = {"Ethereum": "https://etherscan.io/tx/", "Tron": "https://tronscan.org/#/transaction/", "Solana": "https://solscan.io/tx/"}
-    
+
     while True:
         await asyncio.sleep(180)
         free_users, pro_users = await SubscriptionRepo.get_alert_subscribers()
@@ -510,33 +504,36 @@ async def active_blockchain_watcher():
         amt_pro = random.randint(1_000_000, 50_000_000) if coin not in ["ETH", "WBTC"] else random.randint(500, 5000)
         amt_free = random.randint(50_000, 250_000) if coin not in ["ETH", "WBTC"] else random.randint(10, 50)
         utc = datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
-        
+
         for uid in pro_users:
             txt = (
                 f"🚨 <b>INSTITUTIONAL TRANSFER</b>\n\n"
                 f"<b>Asset:</b> {amt_pro:,} {coin}\n<b>Dest:</b> {dest}\n"
                 f"<b>Insight:</b> {insight}\n<b>Time:</b> {utc}"
             )
-            try: alert_queue.put_nowait((uid, txt))
-            except asyncio.QueueFull: pass
+            try:
+                alert_queue.put_nowait((uid, txt))
+            except asyncio.QueueFull:
+                pass
         for uid in free_users:
             txt = (
                 f"📊 <b>ON-CHAIN TRANSFER</b>\n\n"
                 f"<b>Asset:</b> {amt_free:,} {coin}\n<b>Dest:</b> {dest}\n"
                 f"<b>Insight:</b> <i>[Pro Required]</i>\n<b>Time:</b> <i>Delayed</i>"
             )
-            try: alert_queue.put_nowait((uid, txt))
-            except asyncio.QueueFull: pass
+            try:
+                alert_queue.put_nowait((uid, txt))
+            except asyncio.QueueFull:
+                pass
+
 
 async def subscription_monitor():
-    """Check for expiring/expired subscriptions every hour and notify users."""
-    notified_warning = set()   # Track warned users to avoid spam
-    notified_expired = set()   # Track expired notifications
-    
+    notified_warning = set()
+    notified_expired = set()
+
     while True:
-        await asyncio.sleep(3600)  # Every hour
+        await asyncio.sleep(3600)
         try:
-            # 3-day warning
             expiring = await SubscriptionRepo.get_expiring_users(within_hours=72)
             for sub in expiring:
                 if sub.user_id in notified_warning:
@@ -556,7 +553,6 @@ async def subscription_monitor():
                 except asyncio.QueueFull:
                     pass
 
-            # Just expired
             expired = await SubscriptionRepo.get_just_expired_users(within_hours=1)
             for sub in expired:
                 if sub.user_id in notified_expired:
@@ -578,7 +574,6 @@ async def subscription_monitor():
                 except asyncio.QueueFull:
                     pass
 
-            # Cleanup old entries to prevent memory leak
             if len(notified_warning) > 1000:
                 notified_warning.clear()
             if len(notified_expired) > 1000:
@@ -587,25 +582,19 @@ async def subscription_monitor():
             logger.error(f"Subscription monitor error: {e}")
 
 
-# ==========================================
-# 🚀 LIFECYCLE
-# ==========================================
-
 async def start_service():
     global bot_app
     if not CRYPTO_BOT_TOKEN:
         return
-    
+
     await init_crypto_db()
     bot_app = ApplicationBuilder().token(CRYPTO_BOT_TOKEN).build()
-    
-    # Core commands
+
     bot_app.add_handler(CommandHandler("start", cmd_start))
     bot_app.add_handler(CommandHandler("activate", cmd_activate))
     bot_app.add_handler(CommandHandler("keygen", cmd_keygen))
     bot_app.add_handler(CommandHandler("extend", cmd_extend))
     bot_app.add_handler(CommandHandler("audit", cmd_audit))
-    # Pro feature commands
     bot_app.add_handler(CommandHandler("alert", cmd_alert))
     bot_app.add_handler(CommandHandler("alerts", cmd_alerts))
     bot_app.add_handler(CommandHandler("delalert", cmd_delalert))
@@ -617,13 +606,12 @@ async def start_service():
     bot_app.add_handler(CommandHandler("removetoken", cmd_removetoken))
     bot_app.add_handler(CommandHandler("market", cmd_market))
     bot_app.add_handler(CommandHandler("gas", cmd_gas))
-    # Dashboard callback handler
     bot_app.add_handler(CallbackQueryHandler(handle_dashboard))
 
     await bot_app.initialize()
     await bot_app.start()
 
-    webhook_base = (WEBHOOK_URL or "").strip().rstrip('/')
+    webhook_base = (WEBHOOK_URL or "").strip().rstrip("/")
     if webhook_base and not webhook_base.startswith("http"):
         webhook_base = f"https://{webhook_base}"
     if webhook_base:
@@ -639,6 +627,7 @@ async def start_service():
     track_task(asyncio.create_task(safe_loop("wallet_watcher", wallet_watcher)))
     track_task(asyncio.create_task(safe_loop("sub_monitor", subscription_monitor)))
 
+
 async def stop_service():
     for t in list(background_tasks):
         t.cancel()
@@ -647,6 +636,7 @@ async def stop_service():
         await bot_app.shutdown()
     await close_market_client()
     await dispose_crypto_engine()
+
 
 @router.post("/webhook/crypto/{secret}")
 async def crypto_webhook(secret: str, request: Request):

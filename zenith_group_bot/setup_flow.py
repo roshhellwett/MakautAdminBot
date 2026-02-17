@@ -1,144 +1,157 @@
+import html
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.error import BadRequest
 from telegram.ext import ContextTypes
-from zenith_group_bot.repository import SettingsRepo
+
 from core.logger import setup_logger
+from zenith_crypto_bot.repository import SubscriptionRepo
+from zenith_group_bot.repository import SettingsRepo
 
 logger = setup_logger("SETUP_FLOW")
 
+setup_state = {}
+
+FEATURES_KEYBOARD = InlineKeyboardMarkup([
+    [InlineKeyboardButton("🛡️ Anti-Spam Only", callback_data="setup_feat_spam")],
+    [InlineKeyboardButton("🚫 Anti-Abuse Only", callback_data="setup_feat_abuse")],
+    [InlineKeyboardButton("⚔️ Both (Recommended)", callback_data="setup_feat_both")],
+])
+
+STRENGTH_KEYBOARD = InlineKeyboardMarkup([
+    [InlineKeyboardButton("🟢 Low (5 strikes)", callback_data="setup_str_low")],
+    [InlineKeyboardButton("🟡 Medium (3 strikes)", callback_data="setup_str_medium")],
+    [InlineKeyboardButton("🔴 High (2 strikes)", callback_data="setup_str_high")],
+])
+
+
 async def cmd_setup(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_chat.type == "private": return
-    
-    chat_id = update.effective_chat.id
-    user_id = update.effective_user.id
-    bot_username = context.bot.username
+    msg = update.message
 
-    # Check if the user is an admin
-    member = await context.bot.get_chat_member(chat_id, user_id)
-    if member.status not in ["administrator", "creator"]:
-        try: await update.message.delete()
-        except Exception: pass
-        return
+    if msg.chat.type not in ("group", "supergroup"):
+        return await msg.reply_text(
+            "⚠️ Add this bot to your group and use /setup in the group chat."
+        )
 
-    # Check if group is already claimed by someone else
-    existing = await SettingsRepo.get_settings(chat_id)
-    if existing and existing.is_active and existing.owner_id != user_id:
-        return await update.message.reply_text(f"⚠️ This group is secured by Owner ID: <code>{existing.owner_id}</code>.", parse_mode="HTML")
+    chat_id = msg.chat_id
+    user_id = msg.from_user.id
 
-    # Check if the BOT is an admin
     try:
-        bot_member = await context.bot.get_chat_member(chat_id, context.bot.id)
-        if bot_member.status != "administrator":
-            return await update.message.reply_text("❌ <b>Missing Permissions.</b> Promote me to Administrator first.", parse_mode="HTML")
-        if not bot_member.can_delete_messages or not bot_member.can_restrict_members:
-            return await update.message.reply_text("❌ <b>Ensure I have the following rights:</b>\n• Delete Messages\n• Ban Users", parse_mode="HTML")
-    except Exception as e:
-        logger.error(f"Failed to check permissions: {e}")
-        return await update.message.reply_text("❌ Error checking bot permissions. Am I an admin?")
+        member = await context.bot.get_chat_member(chat_id, user_id)
+        if member.status not in ("administrator", "creator"):
+            return await msg.reply_text("⛔ Only group admins can run /setup.")
+    except Exception:
+        return await msg.reply_text("⚠️ Cannot verify admin status. Make sure I'm an admin.")
 
-    # Register the group in the database
-    await SettingsRepo.upsert_settings(chat_id, user_id, update.effective_chat.title)
+    is_pro = await SubscriptionRepo.is_pro(user_id)
+    existing_groups = await SettingsRepo.count_owned_groups(user_id)
 
-    # 🚀 THE CRITICAL FIX: Clean, valid URL format
-    keyboard = [[InlineKeyboardButton("⚙️ Configure Zenith Group BOT", url=f"https://t.me/{bot_username}?start=setup_{chat_id}")]]
-    
+    existing_settings = await SettingsRepo.get_settings(chat_id)
+    is_new_group = existing_settings is None or existing_settings.owner_id != user_id
+
+    if is_new_group:
+        max_groups = 5 if is_pro else 1
+        if existing_groups >= max_groups:
+            tier_msg = (
+                f"⚠️ <b>Group limit reached</b>\n\n"
+                f"You have <b>{existing_groups}/{max_groups}</b> active groups.\n\n"
+            )
+            if not is_pro:
+                tier_msg += (
+                    "💎 Upgrade to <b>Zenith Pro</b> for up to <b>5 groups</b>.\n"
+                    "<code>/activate [YOUR_KEY]</code>"
+                )
+            else:
+                tier_msg += "Pro limit: 5 groups. Use /reset in an old group to free up a slot."
+            return await msg.reply_text(tier_msg, parse_mode="HTML")
+
+    group_name = msg.chat.title or f"Group {chat_id}"
+
     try:
-        await update.message.reply_text(
-            "🛡️ <b>Zenith Group BOT Configuration</b>\n\nClick below to securely configure my settings in our Private DM.",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode="HTML"
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=(
+                f"⚙️ <b>SETUP: {html.escape(group_name)}</b>\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"<b>Step 1/2:</b> Select protection features:"
+            ),
+            reply_markup=FEATURES_KEYBOARD,
+            parse_mode="HTML",
         )
-    except Exception as e:
-        logger.error(f"Failed to send setup message: {e}")
+        setup_state[user_id] = {
+            "chat_id": chat_id,
+            "group_name": group_name,
+            "step": "features",
+        }
+        await msg.reply_text("✅ Check your DMs — I sent the setup wizard!")
+    except Exception:
+        await msg.reply_text("⚠️ I can't DM you. Start a private chat with me first.")
 
-async def cmd_start_dm(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_chat.type != "private": return
-    
-    args = context.args
-    if args and args[0].startswith("setup_"):
-        try: chat_id = int(args[0].split("_")[1])
-        except (IndexError, ValueError): return await update.message.reply_text("❌ Invalid setup configuration link.")
-        
-        settings = await SettingsRepo.get_settings(chat_id)
-        if not settings:
-             return await update.message.reply_text("⏳ This setup session has expired or the group was unregistered.")
-            
-        if settings.owner_id != update.effective_user.id:
-            return await update.message.reply_text("❌ Authentication failed. You do not own this session.")
 
-        keyboard = [
-            [InlineKeyboardButton("Abuse Detection Only", callback_data=f"feat_abuse_{chat_id}")],
-            [InlineKeyboardButton("Spam & Link Shield Only", callback_data=f"feat_spam_{chat_id}")],
-            [InlineKeyboardButton("Both (Recommended)", callback_data=f"feat_both_{chat_id}")]
-        ]
-        await update.message.reply_text(
-            f"⚙️ <b>Configuring:</b> {settings.group_name}\n\nStep 1: What features would you like to enable?",
-            reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML"
-        )
-    else:
-        tutorial = (
-            "👋 <b>Welcome to Zenith Open Source Projects!</b>\n"
-            "I am an enterprise-grade group moderation bot designed to stop spam, raids, and abuse.\n\n"
-            "<b>🛠️ How to setup your group in 4 steps:</b>\n"
-            "1️⃣ Add me to your Telegram group.\n"
-            "2️⃣ Promote me to <b>Administrator</b>.\n"
-            "3️⃣ Type <code>/setup</code> in your group chat.\n"
-            "4️⃣ Click the secure button I generate to configure your custom settings here.\n\n"
-        )
-        await update.message.reply_text(tutorial, parse_mode="HTML")
-
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def setup_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    user_id = query.from_user.id
+
+    if user_id not in setup_state:
+        return await query.edit_message_text("⚠️ Session expired. Run /setup again in your group.")
+
     data = query.data
+    state = setup_state[user_id]
 
-    try:
-        if data.startswith("feat_"):
-            _, feature_type, chat_id = data.split("_")
-            
-            if not await SettingsRepo.get_settings(int(chat_id)):
-                return await query.edit_message_text("⏳ Menu expired. Group data not found.")
-                
-            await SettingsRepo.upsert_settings(int(chat_id), query.from_user.id, None, features=feature_type)
-            
-            keyboard = [
-                [InlineKeyboardButton("Low (Forgiving)", callback_data=f"str_low_{chat_id}")],
-                [InlineKeyboardButton("Medium (Standard)", callback_data=f"str_medium_{chat_id}")],
-                [InlineKeyboardButton("Strict (Zero Tolerance)", callback_data=f"str_strict_{chat_id}")]
-            ]
-            await query.edit_message_text("Step 2: Select the filtering strength.", reply_markup=InlineKeyboardMarkup(keyboard))
+    if data.startswith("setup_feat_"):
+        feature = data.replace("setup_feat_", "")
+        state["features"] = feature
+        state["step"] = "strength"
+        await query.edit_message_text(
+            f"⚙️ <b>SETUP: {html.escape(state['group_name'])}</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"✅ Features: <b>{feature.capitalize()}</b>\n\n"
+            f"<b>Step 2/2:</b> Select enforcement strength:",
+            reply_markup=STRENGTH_KEYBOARD,
+            parse_mode="HTML",
+        )
 
-        elif data.startswith("str_"):
-            _, strength_type, chat_id = data.split("_")
-            if not await SettingsRepo.get_settings(int(chat_id)):
-                return await query.edit_message_text("⏳ Menu expired. Group data not found.")
+    elif data.startswith("setup_str_"):
+        strength = data.replace("setup_str_", "")
+        state["strength"] = strength
 
-            settings = await SettingsRepo.upsert_settings(int(chat_id), query.from_user.id, None, strength=strength_type, is_active=True)
-            
-            await query.edit_message_text(
-                f"✅ <b>Setup Complete!</b>\n\nZenith is actively monitoring <b>{settings.group_name}</b>.",
-                parse_mode="HTML"
+        try:
+            record = await SettingsRepo.upsert_settings(
+                chat_id=state["chat_id"],
+                owner_id=user_id,
+                group_name=state["group_name"],
+                features=state["features"],
+                strength=strength,
+                is_active=True,
             )
-            try: await context.bot.send_message(int(chat_id), "✅ <b>Zenith Group BOT Configuration Complete.</b>\nAll security systems are online.", parse_mode="HTML")
-            except Exception: pass
 
-        elif data.startswith("del_"):
-            chat_id = int(data.split("_")[1])
-            success = await SettingsRepo.wipe_group_container(chat_id, query.from_user.id)
-            if success:
-                await query.edit_message_text("🗑️ Container wiped successfully. All data erased.")
-                try: await context.bot.send_message(chat_id, "⚠️ Zenith Group BOT has been unregistered. Security offline.")
-                except Exception: pass
-            else:
-                await query.edit_message_text("❌ Failed to wipe data.")
-    except BadRequest as e:
-        if "not modified" not in str(e).lower():
-            logger.error(f"Callback Error: {e}")
+            is_pro = await SubscriptionRepo.is_pro(user_id)
+            pro_section = ""
+            if is_pro:
+                pro_section = (
+                    "\n\n<b>💎 PRO COMMANDS:</b>\n"
+                    "• <code>/addword [word]</code> — Custom word filter\n"
+                    "• <code>/antiraid on/off</code> — Anti-raid lockdown\n"
+                    "• <code>/analytics</code> — Moderation stats\n"
+                    "• <code>/schedule HH:MM [msg]</code> — Scheduled messages\n"
+                    "• <code>/welcome [msg]</code> — Custom welcome\n"
+                    "• <code>/auditlog</code> — View audit log"
+                )
 
-async def cmd_deletegroup(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_chat.type != "private": return
-    groups = await SettingsRepo.get_owned_groups(update.effective_user.id)
-    if not groups: return await update.message.reply_text("You don't have any active setups.")
-    
-    keyboard = [[InlineKeyboardButton(f"🗑️ Wipe {g.group_name}", callback_data=f"del_{g.chat_id}")] for g in groups]
-    await update.message.reply_text("Select a group container to completely erase:", reply_markup=InlineKeyboardMarkup(keyboard))
+            await query.edit_message_text(
+                f"✅ <b>SETUP COMPLETE</b>\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"<b>Group:</b> {html.escape(state['group_name'])}\n"
+                f"<b>Features:</b> {state['features'].capitalize()}\n"
+                f"<b>Strength:</b> {strength.capitalize()}\n"
+                f"<b>Status:</b> ✅ Active{pro_section}\n\n"
+                f"<b>Core Commands:</b>\n"
+                f"• <code>/forgive</code> — Clear user strikes\n"
+                f"• <code>/reset</code> — Wipe group data\n"
+                f"• <code>/setup</code> — Reconfigure",
+                parse_mode="HTML",
+            )
+        except Exception as e:
+            logger.error(f"Setup save failed: {e}")
+            await query.edit_message_text("❌ Setup failed. Please try again.")
+        finally:
+            setup_state.pop(user_id, None)
