@@ -1,7 +1,7 @@
 import re
 import asyncio
 import unicodedata
-from zenith_group_bot.word_list import BANNED_WORDS
+from zenith_group_bot.word_list import BANNED_WORDS, SPAM_DOMAINS
 
 # Compile regex at startup (O(1) time complexity)
 _PATTERN_STRING = r'\b(' + '|'.join(map(re.escape, BANNED_WORDS)) + r')\b'
@@ -20,6 +20,12 @@ def _sync_regex_scan(text: str) -> tuple[bool, str]:
 
     if BANNED_REGEX.search(clean_text):
         return True, "Banned vocabulary detected."
+    
+    # Check for known spam/phishing domains
+    text_lower = clean_text.lower()
+    for domain in SPAM_DOMAINS:
+        if domain in text_lower:
+            return True, f"Spam domain detected: {domain}"
             
     return False, ""
 

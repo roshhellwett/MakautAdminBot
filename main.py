@@ -2,7 +2,8 @@ import uvicorn
 import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from core.config import PORT
+from fastapi.responses import JSONResponse
+from core.config import PORT, WEBHOOK_SECRET
 from core.logger import setup_logger
 
 # 🔌 Import your isolated Bot Modules
@@ -15,6 +16,9 @@ logger = setup_logger("GATEWAY")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("🚀 PROJECT MONOLITH: STARTING API GATEWAY")
+    
+    if not WEBHOOK_SECRET:
+        logger.critical("⚠️ WEBHOOK_SECRET is not set! Webhooks are insecure.")
     
     # 1. Boot up all isolated microservices
     await run_group_bot.start_service()
@@ -47,6 +51,10 @@ app = FastAPI(lifespan=lifespan)
 app.include_router(run_group_bot.router)
 app.include_router(run_ai_bot.router)
 app.include_router(run_crypto_bot.router) # 🐋 EXPOSING CRYPTO ROUTES
+
+@app.get("/health")
+async def health_check():
+    return JSONResponse({"status": "ok", "service": "project-monolith"})
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=PORT)

@@ -35,7 +35,7 @@ BANNED_WORDS = [
     "bhadwa", "bhadwaa", "rakhail", "hijrah", "hijdah", "hijda", "saala", "chhakkah", 
     "chakka", "meetha", "katua", "mulla", "mulle", "khotta", "tatte", "tatti", 
     "tattee", "tatty", "saala", "salasali", "sali", "nalayak", "nikamma", "nalayak kutta",
-    "bokachoda", "suar ka bacha", "tera maa ka boor", "randi ka jana", "boor ka baal"
+    "bokachoda", "suar ka bacha", "tera maa ka boor", "randi ka jana", "boor ka baal",
 
     # --- [HI] Stage 1 & 2 Devanagari ---
     "चुतिया", "চুতিয়া", "गांडू", "हरामी", "हरामखोर", "भोसड़ीके", "बहनचोद",

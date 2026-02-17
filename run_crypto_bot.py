@@ -7,11 +7,12 @@ from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandle
 from core.logger import setup_logger
 from core.config import CRYPTO_BOT_TOKEN, WEBHOOK_URL, WEBHOOK_SECRET, ADMIN_USER_ID
 from zenith_crypto_bot.ui import get_main_dashboard, get_welcome_msg
-from zenith_crypto_bot.repository import SubscriptionRepo, init_crypto_db
+from zenith_crypto_bot.repository import SubscriptionRepo, init_crypto_db, dispose_crypto_engine
 
 logger = setup_logger("SVC_WHALE")
 router = APIRouter()
 bot_app = None
+_background_tasks = []
 
 # 🚀 MEMORY STATE: Remembers who is subscribed to the Live Radar
 free_subscribers = set()
@@ -176,13 +177,16 @@ async def start_service():
         except Exception: pass
 
     # Start the active background workers!
-    asyncio.create_task(alert_dispatcher())
-    asyncio.create_task(active_blockchain_watcher())
+    _background_tasks.append(asyncio.create_task(alert_dispatcher()))
+    _background_tasks.append(asyncio.create_task(active_blockchain_watcher()))
 
 async def stop_service():
+    for t in _background_tasks:
+        t.cancel()
     if bot_app:
         await bot_app.stop()
         await bot_app.shutdown()
+    await dispose_crypto_engine()
 
 @router.post("/webhook/crypto/{secret}")
 async def crypto_webhook(secret: str, request: Request):

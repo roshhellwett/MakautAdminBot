@@ -1,4 +1,5 @@
 import asyncio
+import functools
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import select, delete, update
@@ -33,6 +34,7 @@ async def dispose_group_engine():
 
 # 🚀 SCENARIO 10: Exponential Backoff for Network Blips
 def db_retry(func):
+    @functools.wraps(func)
     async def wrapper(*args, **kwargs):
         for attempt in range(3):
             try: return await func(*args, **kwargs)

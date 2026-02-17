@@ -15,7 +15,7 @@
 
 ## 🤖 Project Monolith Bot Ecosystem
 
-includes multiple categories of bots designed for daily user productivity and community management:
+Includes multiple categories of bots designed for daily user productivity and community management:
 
 ### 🤖 Zenith Group BOT
 - Anti-spam protection  
@@ -25,16 +25,21 @@ includes multiple categories of bots designed for daily user productivity and co
 
 ### 🤖 Zenith AI BOT
 - Implementation of Grok for scaling information  
-- Provinding all kind of AI ventures 
-- Build for large scale groups on telegram 
+- Providing all kinds of AI ventures 
+- Built for large scale groups on Telegram 
 - Using Serper & Grok simultaneously  
 
+### 🐋 Zenith Crypto BOT (Whale)
+- Live whale wallet tracking & alerts  
+- Smart contract auditing  
+- Pro subscription system with activation keys  
+- Volume spike detection (DexScreener Pulse)  
 
 ---
 
 ## 🏗️ Architecture
 
-Zenith is built using a **multi-tenant, async-first microservices approach**, allowing multiple bots to operate efficiently under a unified infrastructure..
+Zenith is built using a **multi-tenant, async-first microservices approach**, allowing multiple bots to operate efficiently under a unified infrastructure.
 
 ### Core Technology Stack
 
@@ -45,7 +50,17 @@ Zenith is built using a **multi-tenant, async-first microservices approach**, al
 | Async Driver | asyncpg |
 | ORM | SQLAlchemy 2.0 |
 | Bot Framework | python-telegram-bot v20+ |
+| API Gateway | FastAPI + Uvicorn |
 | Architecture | Multi-Tenant SaaS Model |
+
+---
+
+## 🚀 Quick Start
+
+1. Clone the repository
+2. Copy `.env.example` to `.env` and fill in your tokens
+3. Install dependencies: `pip install -r requirements.txt`
+4. Run the server: `python main.py`
 
 ---
 
@@ -57,7 +72,6 @@ Zenith is built using a **multi-tenant, async-first microservices approach**, al
 ---
 
 © 2026 [Zenith Open Source Projects](https://zenithopensourceprojects.vercel.app/). All Rights Reserved.  
-Zenith is a Open Source Project Idea's by @roshhellwett
+Zenith is an Open Source Project by @roshhellwett
 
 ---
-

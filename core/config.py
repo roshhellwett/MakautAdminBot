@@ -10,7 +10,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "")
 # 🚀 WEBHOOK CONFIGURATION
 WEBHOOK_URL = os.getenv("WEBHOOK_URL", "")
 PORT = int(os.getenv("PORT", 8080))
-WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "zenith_secure_path_777")
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "")
 
 # ==========================================
 # 🐋 ZENITH WHALE CONFIGURATION (NEW)

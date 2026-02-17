@@ -1,10 +1,10 @@
-import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 from zenith_group_bot.repository import SettingsRepo
+from core.logger import setup_logger
 
-logger = logging.getLogger("SETUP_FLOW")
+logger = setup_logger("SETUP_FLOW")
 
 async def cmd_setup(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.type == "private": return
@@ -17,7 +17,7 @@ async def cmd_setup(update: Update, context: ContextTypes.DEFAULT_TYPE):
     member = await context.bot.get_chat_member(chat_id, user_id)
     if member.status not in ["administrator", "creator"]:
         try: await update.message.delete()
-        except: pass
+        except Exception: pass
         return
 
     # Check if group is already claimed by someone else
@@ -120,7 +120,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="HTML"
             )
             try: await context.bot.send_message(int(chat_id), "✅ <b>Zenith Group BOT Configuration Complete.</b>\nAll security systems are online.", parse_mode="HTML")
-            except: pass
+            except Exception: pass
 
         elif data.startswith("del_"):
             chat_id = int(data.split("_")[1])
@@ -128,7 +128,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if success:
                 await query.edit_message_text("🗑️ Container wiped successfully. All data erased.")
                 try: await context.bot.send_message(chat_id, "⚠️ Zenith Group BOT has been unregistered. Security offline.")
-                except: pass
+                except Exception: pass
             else:
                 await query.edit_message_text("❌ Failed to wipe data.")
     except BadRequest as e:

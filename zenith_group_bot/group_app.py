@@ -1,5 +1,3 @@
-import os
-import logging
 import asyncio
 import traceback
 from cachetools import TTLCache
@@ -13,8 +11,10 @@ from zenith_group_bot.filters import is_inappropriate
 from zenith_group_bot.flood_control import is_flooding
 from zenith_group_bot.repository import init_group_db, MemberRepo, SettingsRepo, GroupRepo
 from core.task_manager import fire_and_forget
+from core.logger import setup_logger
+from core.config import GROUP_BOT_TOKEN
 
-logger = logging.getLogger("GROUP_BOT")
+logger = setup_logger("GROUP_BOT")
 _group_app = None
 
 # 🚀 SCENARIO 3: Admin Immunity Cache
@@ -186,10 +186,12 @@ async def group_monitor_handler(update: Update, context: ContextTypes.DEFAULT_TY
 # 🚀 REFACTORED FOR WEBHOOK MONOLITH
 async def setup_group_app():
     """Builds the PTB application but does not start polling."""
-    token = os.getenv("GROUP_BOT_TOKEN")
+    if not GROUP_BOT_TOKEN:
+        logger.warning("⚠️ GROUP_BOT_TOKEN missing! Group Service disabled.")
+        return None
     await init_group_db()
 
-    app = ApplicationBuilder().token(token).build()
+    app = ApplicationBuilder().token(GROUP_BOT_TOKEN).build()
     
     app.add_handler(CommandHandler("start", cmd_start_dm))
     app.add_handler(CommandHandler("setup", cmd_setup))

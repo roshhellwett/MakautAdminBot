@@ -1,7 +1,6 @@
 import os
 import re
 import asyncio
-from dotenv import load_dotenv
 from fastapi import APIRouter, Request, Response
 from telegram import Update, InlineQueryResultArticle, InputTextMessageContent
 from telegram.ext import ApplicationBuilder, CommandHandler, InlineQueryHandler, ContextTypes
@@ -11,7 +10,7 @@ from core.config import AI_BOT_TOKEN, WEBHOOK_URL, WEBHOOK_SECRET
 from zenith_ai_bot.llm_engine import process_ai_query
 from zenith_ai_bot.utils import check_ai_rate_limit, sanitize_telegram_html, dispose_db_engine
 
-load_dotenv()
+
 logger = setup_logger("SVC_AI")
 router = APIRouter()
 
@@ -44,7 +43,7 @@ async def ai_worker():
             except Exception as e:
                 logger.error(f"Worker Error: {e}")
                 try: await context.bot.edit_message_text(chat_id=placeholder_msg.chat_id, message_id=placeholder_msg.message_id, text="❌ Connection to AI lost.")
-                except: pass
+                except Exception: pass
             finally:
                 task_queue.task_done()
         except asyncio.CancelledError:
