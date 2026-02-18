@@ -37,11 +37,6 @@ async def get_db_engine():
                 pool_size=5,
                 max_overflow=10,
                 pool_pre_ping=True,
-                connect_args={
-                    "ssl": True,
-                    "connect_timeout": 10,
-                    "command_timeout": 30,
-                }
             )
     return _ai_db_engine
 
