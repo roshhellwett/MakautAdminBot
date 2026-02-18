@@ -5,6 +5,7 @@ from core.validators import validate_priority
 from core.animation import send_typing_action
 from core.config import is_owner
 from zenith_support_bot.repository import TicketRepo, FAQRepo, CannedRepo
+from zenith_support_bot.notifications import notify_user_on_admin_reply
 from zenith_support_bot.ui import (
     get_priority_keyboard, get_canned_keyboard, get_faq_keyboard,
     get_confirm_close_ticket, get_confirm_close_ticket_msg,
@@ -198,8 +199,16 @@ async def cmd_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, is_pro: 
 
     success = await TicketRepo.set_admin_response(ticket_id, canned.content)
     if success:
+        ticket = await TicketRepo.get_ticket(ticket_id)
+        if ticket:
+            await notify_user_on_admin_reply(
+                user_id=ticket.user_id,
+                ticket_id=ticket_id,
+                subject=ticket.subject,
+                admin_response=canned.content,
+            )
         await update.message.reply_text(
-            f"✅ <b>Response Applied</b>\n\nTicket #{ticket_id} replied with: {canned.content[:200]}...",
+            f"✅ <b>Response Applied</b>\n\nTicket #{ticket_id} replied with: {canned.content[:200]}...\n\n📬 User has been notified.",
             parse_mode="HTML",
         )
     else:
@@ -377,8 +386,16 @@ async def cmd_resolve(update: Update, context: ContextTypes.DEFAULT_TYPE, is_adm
 
     success = await TicketRepo.set_admin_response(ticket_id, response)
     if success:
+        ticket = await TicketRepo.get_ticket(ticket_id)
+        if ticket:
+            await notify_user_on_admin_reply(
+                user_id=ticket.user_id,
+                ticket_id=ticket_id,
+                subject=ticket.subject,
+                admin_response=response,
+            )
         await update.message.reply_text(
-            f"✅ <b>Ticket Resolved</b>\n\nTicket #{ticket_id} has been resolved with your response.",
+            f"✅ <b>Ticket Resolved</b>\n\nTicket #{ticket_id} has been resolved with your response.\n\n📬 User has been notified.",
             parse_mode="HTML",
         )
     else:

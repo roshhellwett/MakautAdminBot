@@ -13,6 +13,8 @@ class GroupSettings(Base):
     features = Column(String, default="both")
     strength = Column(String, default="medium")
     is_active = Column(Boolean, default=False)
+    ai_enabled = Column(Boolean, default=False)
+    crypto_enabled = Column(Boolean, default=False)
     setup_date = Column(DateTime, default=utc_now)
 
 

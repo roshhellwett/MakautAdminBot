@@ -86,7 +86,7 @@ class SettingsRepo:
 
     @staticmethod
     @db_retry
-    async def upsert_settings(chat_id: int, owner_id: int, group_name: str, features: str = None, strength: str = None, is_active: bool = None):
+    async def upsert_settings(chat_id: int, owner_id: int, group_name: str, features: str = None, strength: str = None, is_active: bool = None, ai_enabled: bool = None, crypto_enabled: bool = None):
         async with AsyncSessionLocal() as session:
             stmt = pg_insert(GroupSettings).values(
                 chat_id=chat_id, owner_id=owner_id, group_name=group_name,
@@ -101,6 +101,10 @@ class SettingsRepo:
                 update_dict["is_active"] = is_active
             if group_name:
                 update_dict["group_name"] = group_name
+            if ai_enabled is not None:
+                update_dict["ai_enabled"] = ai_enabled
+            if crypto_enabled is not None:
+                update_dict["crypto_enabled"] = crypto_enabled
 
             if update_dict:
                 stmt = stmt.on_conflict_do_update(index_elements=["chat_id"], set_=update_dict)

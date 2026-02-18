@@ -321,15 +321,27 @@ def get_pro_feature_msg(feature: str) -> tuple:
     messages = {
         "analytics": (
             "📊 <b>Analytics (Pro)</b>\n\n"
-            "View support analytics including response times and satisfaction rates."
+            "View support analytics including response times and satisfaction rates.\n\n"
+            "💎 <b>Pro Benefits (₹149/month):</b>\n"
+            "• Priority support\n"
+            "• Unlimited tickets\n"
+            "• Ticket analytics"
         ),
         "canned": (
             "💾 <b>Canned Responses (Pro)</b>\n\n"
-            "Create and manage pre-written responses for common questions."
+            "Create and manage pre-written responses for common questions.\n\n"
+            "💎 <b>Pro Benefits (₹149/month):</b>\n"
+            "• Priority support\n"
+            "• Unlimited tickets\n"
+            "• Canned responses"
         ),
         "priority": (
             "🏷️ <b>Priority Support (Pro)</b>\n\n"
-            "Set priority levels on your tickets for faster response."
+            "Set priority levels on your tickets for faster response.\n\n"
+            "💎 <b>Pro Benefits (₹149/month):</b>\n"
+            "• Priority support\n"
+            "• Unlimited tickets\n"
+            "• Priority queue"
         ),
     }
     

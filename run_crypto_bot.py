@@ -64,6 +64,67 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    is_pro = await SubscriptionRepo.is_pro(user_id)
+    
+    help_text = (
+        "📖 <b>ZENITH CRYPTO BOT - FULL GUIDE</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        
+        "<b>💰 PRICE COMMANDS</b>\n"
+        "• <code>/price [symbol]</code> - Get token price (e.g., /price BTC)\n"
+        "• <code>/market</code> - Market overview + Fear & Greed\n"
+        "• <code>/gas</code> - Ethereum gas prices\n\n"
+        
+        "<b>🔔 ALERTS & TRACKING</b>\n"
+        "• <code>/alert [token] [above/below] [price]</code> - Set price alert\n"
+        "  Example: <code>/alert BTC above 100000</code>\n"
+        "• <code>/alerts</code> - View your price alerts\n"
+        "• <code>/track [address] [label]</code> - Track wallet (Pro)\n"
+        "• <code>/wallets</code> - View tracked wallets (Pro)\n\n"
+        
+        "<b>💼 PORTFOLIO</b>\n"
+        "• <code>/addtoken [symbol] [entry_price] [qty]</code> - Add position\n"
+        "  Example: <code>/addtoken BTC 95000 0.5</code>\n"
+        "• <code>/portfolio</code> - View your portfolio\n"
+        "• <code>/removetoken [symbol]</code> - Remove position\n\n"
+        
+        "<b>🛡️ SECURITY</b>\n"
+        "• <code>/audit [contract]</code> - Scan token for risks\n"
+        "  Example: <code>/audit 0x1234...</code>\n\n"
+        
+        "<b>💎 PRO FEATURES (₹149/month)</b>\n"
+        "• Unlimited price alerts\n"
+        "• Wallet tracking (5 wallets)\n"
+        "• Full security audits\n"
+        "• New pair scanner\n"
+        "• Fear & Greed Index\n"
+        "• Top movers gainers/losers\n"
+        "• Advanced portfolio analytics\n\n"
+        
+        "<b>📱 GROUP USAGE</b>\n"
+        "Add bot to groups and use:\n"
+        "• <code>/price [symbol]</code> - Get prices in group\n"
+        "• <code>/market</code> - Market overview\n\n"
+        
+        "<b>💳 UPGRADE TO PRO</b>\n"
+        "Contact @admin to get your activation key!\n"
+        "Price: ₹149/month (India)"
+    )
+    
+    keyboard = [
+        [InlineKeyboardButton("💬 Buy Pro", url=f"tg://user?id={ADMIN_USER_ID}")],
+        [InlineKeyboardButton("🔙 Back", callback_data="ui_main_menu")]
+    ]
+    
+    await update.message.reply_text(
+        help_text,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="HTML"
+    )
+
+
 async def cmd_activate(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         return await update.message.reply_text("⚠️ <b>Invalid Format.</b> Use: <code>/activate [YOUR_KEY]</code>", parse_mode="HTML")
@@ -541,6 +602,7 @@ async def start_service():
     bot_app = ApplicationBuilder().token(CRYPTO_BOT_TOKEN).build()
 
     bot_app.add_handler(CommandHandler("start", cmd_start))
+    bot_app.add_handler(CommandHandler("help", cmd_help))
     bot_app.add_handler(CommandHandler("activate", cmd_activate))
     bot_app.add_handler(CommandHandler("audit", cmd_audit))
     bot_app.add_handler(CommandHandler("alert", cmd_alert))

@@ -2,7 +2,7 @@ import re
 import html
 import asyncio
 from fastapi import APIRouter, Request, Response
-from telegram import Update, InlineQueryResultArticle, InputTextMessageContent
+from telegram import Update, InlineQueryResultArticle, InputTextMessageContent, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, InlineQueryHandler,
     CallbackQueryHandler, ContextTypes,
@@ -110,12 +110,67 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• <code>/code [desc]</code> — Code generator 🔒\n"
         f"• <code>/imagine [desc]</code> — Image prompts 🔒\n"
         f"• <code>/history</code> — Chat memory 🔒\n\n"
-        f"<i>🔒 = Pro Required</i>"
+        f"<i>🔒 = Pro Required | Use /help for full guide</i>"
     )
     await update.message.reply_text(
         welcome,
         reply_markup=get_ai_dashboard(is_pro, persona, usage),
         parse_mode="HTML",
+    )
+
+
+async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    is_pro = await SubscriptionRepo.is_pro(user_id)
+    
+    help_text = (
+        "📖 <b>ZENITH AI BOT - FULL GUIDE</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        
+        "<b>🤖 MAIN COMMANDS</b>\n"
+        "• <code>/start</code> - Start the bot & see dashboard\n"
+        "• <code>/zenith [question]</code> - Ask AI anything\n"
+        "• <code>/help</code> - Show this help message\n\n"
+        
+        "<b>🎭 PERSONAS</b>\n"
+        "• <code>/persona</code> - View/switch AI personality\n"
+        "  Available: Default, Coder, Writer, Analyst, Tutor, Debate, Roast\n\n"
+        
+        "<b>📝 TEXT TOOLS</b>\n"
+        "• <code>/summarize [text]</code> - Summarize long text\n"
+        "  (Reply to a message with /summarize)\n\n"
+        
+        "<b>💻 PRO FEATURES (₹149/month)</b>\n"
+        "• <code>/research [topic]</code> - Deep research on any topic\n"
+        "• <code>/code [description]</code> - Generate code in any language\n"
+        "• <code>/imagine [description]</code> - Create image prompts\n"
+        "• <code>/history</code> - View chat memory\n\n"
+        
+        "<b>💎 PRO BENEFITS</b>\n"
+        "• Unlimited messages\n"
+        "• 7 AI personas\n"
+        "• Longer responses\n"
+        "• Priority support\n\n"
+        
+        "<b>📱 GROUP USAGE</b>\n"
+        "Add bot to groups and use:\n"
+        "• <code>/ask [question]</code> - Ask AI in group\n"
+        "• <code>/grouphelp</code> - Group-specific help\n\n"
+        
+        "<b>💳 UPGRADE TO PRO</b>\n"
+        "Contact @admin to get your activation key!\n"
+        "Price: ₹149/month (India)"
+    )
+    
+    keyboard = [
+        [InlineKeyboardButton("💬 Buy Pro", url=f"tg://user?id={ADMIN_USER_ID}")],
+        [InlineKeyboardButton("🔙 Back", callback_data="ai_main_menu")]
+    ]
+    
+    await update.message.reply_text(
+        help_text,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="HTML"
     )
 
 
@@ -367,6 +422,7 @@ async def start_service():
     bot_app = ApplicationBuilder().token(AI_BOT_TOKEN).build()
 
     bot_app.add_handler(CommandHandler("start", cmd_start))
+    bot_app.add_handler(CommandHandler("help", cmd_help))
     bot_app.add_handler(CommandHandler("zenith", cmd_zenith))
     bot_app.add_handler(CommandHandler("persona", cmd_persona))
     bot_app.add_handler(CommandHandler("research", cmd_research))

@@ -174,12 +174,14 @@ def get_pro_feature_msg(feature: str) -> tuple:
     message = (
         f"🔒 <b>Pro Feature: {feature}</b>\n\n"
         f"This feature is available exclusively for PRO members.\n\n"
-        f"💎 <b>Pro Benefits:</b>\n"
-        f"• 25 price alerts\n"
+        f"💎 <b>Pro Benefits (₹149/month):</b>\n"
+        f"• Unlimited price alerts\n"
         f"• 5 whale wallet tracking\n"
         f"• Full GoPlus security scans\n"
         f"• Real-time smart money alerts\n"
-        f"• Unlimited portfolio positions"
+        f"• Unlimited portfolio positions\n"
+        f"• New pair scanner\n"
+        f"• Fear & Greed Index"
     )
     
     keyboard = InlineKeyboardMarkup([

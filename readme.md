@@ -117,37 +117,16 @@ Zenith is a multi-bot Telegram platform that delivers real-time blockchain intel
 
 ---
 
-## Pricing
+## Pricing (India - INR)
 
 ```bash
 
-150.00 Rs - 1 Month Bundle
+₹149/month - Full Pro Bundle (All Bots)
+   • Zenith AI Bot - Unlimited access
+   • Zenith Crypto Bot - Unlimited access  
+   • Zenith Group Bot - Full features
+   • Zenith Support Bot - Priority support
 
-300.00 Rs - 3 Month Bundle
-
-```
-
-## 📦 Architecture
-
-```
-projectmonolith/
-├── main.py                    # FastAPI gateway + rate limiter
-├── run_crypto_bot.py          # Crypto bot lifecycle + commands
-├── run_ai_bot.py              # AI bot lifecycle
-├── run_group_bot.py           # Group bot lifecycle
-├── core/
-│   ├── config.py              # Environment variable loader
-│   ├── logger.py              # Colored logging
-│   └── task_manager.py        # Background task utilities
-├── zenith_crypto_bot/
-│   ├── models.py              # DB models (User, Subscription, PriceAlert, etc.)
-│   ├── repository.py          # Data access layer
-│   ├── market_service.py      # External APIs (CoinGecko, GoPlus, Etherscan)
-│   ├── pro_handlers.py        # Pro feature command handlers
-│   └── ui.py                  # Telegram keyboard layouts
-├── zenith_ai_bot/             # AI bot module
-├── zenith_group_bot/          # Group moderation module
-└── utils/                     # Shared utilities
 ```
 
 ---

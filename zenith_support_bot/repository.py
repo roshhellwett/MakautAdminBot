@@ -173,6 +173,80 @@ class TicketRepo:
                 status="resolved",
                 updated_at=utc_now(),
                 resolved_at=utc_now(),
+                last_admin_reply_at=utc_now(),
+                user_replied="false",
+                reminder_sent="false",
+            )
+            result = await session.execute(stmt)
+            await session.commit()
+            ticket_cache.pop(f"ticket_{ticket_id}", None)
+            return result.rowcount > 0
+
+    @staticmethod
+    @db_retry
+    async def set_user_reply(ticket_id: int, user_reply: str) -> bool:
+        async with AsyncSessionLocal() as session:
+            stmt = update(SupportTicket).where(SupportTicket.id == ticket_id).values(
+                user_reply=user_reply,
+                user_replied="true",
+                status="in_progress",
+                updated_at=utc_now(),
+            )
+            result = await session.execute(stmt)
+            await session.commit()
+            ticket_cache.pop(f"ticket_{ticket_id}", None)
+            return result.rowcount > 0
+
+    @staticmethod
+    @db_retry
+    async def get_awaiting_reply_tickets(hours: int = 24) -> list:
+        async with AsyncSessionLocal() as session:
+            cutoff = utc_now() - timedelta(hours=hours)
+            stmt = select(SupportTicket).where(
+                SupportTicket.last_admin_reply_at.isnot(None),
+                SupportTicket.last_admin_reply_at < cutoff,
+                SupportTicket.user_replied == "false",
+                SupportTicket.status == "resolved",
+            )
+            return (await session.execute(stmt)).scalars().all()
+
+    @staticmethod
+    @db_retry
+    async def get_reminder_tickets(hours: int = 23) -> list:
+        async with AsyncSessionLocal() as session:
+            cutoff = utc_now() - timedelta(hours=hours)
+            cutoff_24 = utc_now() - timedelta(hours=24)
+            stmt = select(SupportTicket).where(
+                SupportTicket.last_admin_reply_at.isnot(None),
+                SupportTicket.last_admin_reply_at < cutoff,
+                SupportTicket.last_admin_reply_at > cutoff_24,
+                SupportTicket.user_replied == "false",
+                SupportTicket.reminder_sent == "false",
+                SupportTicket.status == "resolved",
+            )
+            return (await session.execute(stmt)).scalars().all()
+
+    @staticmethod
+    @db_retry
+    async def mark_reminder_sent(ticket_id: int) -> bool:
+        async with AsyncSessionLocal() as session:
+            stmt = update(SupportTicket).where(SupportTicket.id == ticket_id).values(
+                reminder_sent="true",
+            )
+            result = await session.execute(stmt)
+            await session.commit()
+            return result.rowcount > 0
+
+    @staticmethod
+    @db_retry
+    async def auto_close_ticket(ticket_id: int) -> bool:
+        async with AsyncSessionLocal() as session:
+            stmt = update(SupportTicket).where(
+                SupportTicket.id == ticket_id,
+                SupportTicket.status == "resolved",
+            ).values(
+                status="closed",
+                updated_at=utc_now(),
             )
             result = await session.execute(stmt)
             await session.commit()

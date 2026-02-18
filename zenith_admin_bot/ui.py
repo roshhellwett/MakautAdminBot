@@ -8,9 +8,12 @@ def get_admin_main_menu() -> InlineKeyboardMarkup:
         [InlineKeyboardButton("📊 System Overview", callback_data="admin_overview")],
         [InlineKeyboardButton("🔑 Key Management", callback_data="admin_keys")],
         [InlineKeyboardButton("👤 User Management", callback_data="admin_users")],
+        [InlineKeyboardButton("👥 Group Management", callback_data="admin_groups")],
+        [InlineKeyboardButton("📢 Broadcast", callback_data="admin_broadcast")],
         [InlineKeyboardButton("🤖 Bot Health", callback_data="admin_health")],
         [InlineKeyboardButton("📋 Audit Log", callback_data="admin_audit")],
         [InlineKeyboardButton("📈 Revenue Analytics", callback_data="admin_revenue")],
+        [InlineKeyboardButton("🛡️ Security Panel", callback_data="admin_security")],
         [InlineKeyboardButton("🔙 Back", callback_data="admin_back")],
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -126,7 +129,7 @@ def format_audit_log(logs: List) -> str:
 def format_revenue_analytics(stats: dict) -> str:
     pro_users = stats.get("pro_users", 0)
     active_subs = stats.get("active_subscriptions", 0)
-    avg_value_per_user = 9.99
+    avg_value_per_user = 149
     estimated_mrr = active_subs * avg_value_per_user
 
     lines = [
@@ -137,9 +140,9 @@ def format_revenue_analytics(stats: dict) -> str:
         f"<b>⚠️ At Risk (7d):</b> {stats.get('expiring_within_7_days', 0):,}",
         "",
         "<b>💰 ESTIMATED MRR</b>",
-        f"<b>Active Subs × $150:</b> ${estimated_mrr:,.2f}",
+        f"<b>Active Subs × ₹149:</b> ₹{estimated_mrr:,.2f}",
         "",
-        "<i>Note: Based on $150/month base plan</i>",
+        "<i>Note: Based on ₹149/month base plan (India)</i>",
     ]
     return "\n".join(lines)
 
@@ -177,3 +180,77 @@ def get_key_management_keyboard() -> InlineKeyboardButton:
         [InlineKeyboardButton("🔙 Back", callback_data="admin_main")],
     ]
     return InlineKeyboardMarkup(keyboard)
+
+
+def get_groups_keyboard() -> InlineKeyboardMarkup:
+    keyboard = [
+        [InlineKeyboardButton("📊 List Active Groups", callback_data="admin_groups_list")],
+        [InlineKeyboardButton("🔍 Search Group", callback_data="admin_groups_search")],
+        [InlineKeyboardButton("🚫 Force Disable Group", callback_data="admin_groups_disable")],
+        [InlineKeyboardButton("🔙 Back", callback_data="admin_main")],
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+def get_broadcast_keyboard() -> InlineKeyboardMarkup:
+    keyboard = [
+        [InlineKeyboardButton("📣 Broadcast to All Users", callback_data="admin_broadcast_users")],
+        [InlineKeyboardButton("👥 Broadcast to All Groups", callback_data="admin_broadcast_groups")],
+        [InlineKeyboardButton("💎 Broadcast to Pro Users", callback_data="admin_broadcast_pro")],
+        [InlineKeyboardButton("🔙 Back", callback_data="admin_main")],
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+def get_security_keyboard() -> InlineKeyboardMarkup:
+    keyboard = [
+        [InlineKeyboardButton("🚫 Ban User", callback_data="admin_security_ban")],
+        [InlineKeyboardButton("✅ Unban User", callback_data="admin_security_unban")],
+        [InlineKeyboardButton("📊 View Banned Users", callback_data="admin_security_banned")],
+        [InlineKeyboardButton("⚠️ Emergency Stop", callback_data="admin_security_stop")],
+        [InlineKeyboardButton("🔙 Back", callback_data="admin_main")],
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+def format_group_list(groups: List) -> str:
+    if not groups:
+        return "<b>👥 GROUP MANAGEMENT</b>\n━━━━━━━━━━━━━━━━━━━━━━━━\n\nNo active groups found."
+
+    lines = ["<b>👥 ACTIVE GROUPS</b>\n━━━━━━━━━━━━━━━━━━━━━━━━"]
+    for g in groups[:20]:
+        status = "🟢" if g.is_active else "🔴"
+        ai = "🤖" if g.ai_enabled else ""
+        crypto = "💰" if g.crypto_enabled else ""
+        lines.append(
+            f"{status} <b>{g.group_name or 'Unnamed'}</b>\n"
+            f"   ID: <code>{g.chat_id}</code> | Owner: <code>{g.owner_id}</code>\n"
+            f"   Features: {ai} {crypto}"
+        )
+
+    if len(groups) > 20:
+        lines.append(f"\n<i>...and {len(groups) - 20} more groups</i>")
+
+    return "\n".join(lines)
+
+
+def format_banned_users(users: List) -> str:
+    if not users:
+        return "<b>🛡️ BANNED USERS</b>\n━━━━━━━━━━━━━━━━━━━━━━━━\n\nNo banned users."
+
+    lines = ["<b>🛡️ BANNED USERS</b>\n━━━━━━━━━━━━━━━━━━━━━━━━"]
+    for u in users[:20]:
+        reason = u.get("reason", "No reason") if isinstance(u, dict) else "No reason"
+        lines.append(f"🚫 <code>{u.get('user_id', 'N/A')}</code> - {reason}")
+
+    return "\n".join(lines)
+
+
+def format_broadcast_preview(message: str, recipient_count: int) -> str:
+    return (
+        "📣 <b>BROADCAST PREVIEW</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"<b>Recipients:</b> {recipient_count:,} users\n"
+        f"<b>Message:</b>\n{message[:500]}...\n\n"
+        "⚠️ This message will be sent to all recipients."
+    )

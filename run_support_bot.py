@@ -25,6 +25,12 @@ from zenith_support_bot.pro_handlers import (
     cmd_priority, cmd_savereply, cmd_replies, cmd_reply,
     cmd_addfaq, cmd_delfaq, cmd_rate, cmd_stats, cmd_resolve,
 )
+from zenith_support_bot.user_handlers import (
+    cmd_my_tickets, cmd_ticket_status,
+    handle_ticket_reply_callback, handle_ticket_reply_message,
+)
+from zenith_support_bot.notifications import set_notification_bot
+from zenith_support_bot.scheduler import start_ticket_scheduler, stop_ticket_scheduler
 
 logger = setup_logger("SUPPORT")
 router = APIRouter()
@@ -606,6 +612,12 @@ async def start_service():
     bot_app.add_handler(CommandHandler("delfaq", wrap_delfaq))
     
     bot_app.add_handler(CallbackQueryHandler(handle_dashboard))
+    bot_app.add_handler(CallbackQueryHandler(handle_ticket_reply_callback, pattern=r"^ticket_reply_"))
+    bot_app.add_handler(CallbackQueryHandler(handle_ticket_close_callback, pattern=r"^ticket_close_user_"))
+    
+    bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_ticket_reply_message))
+    
+    set_notification_bot(bot_app)
 
     await bot_app.initialize()
     await bot_app.start()
@@ -621,9 +633,12 @@ async def start_service():
             pass
 
     track_task(asyncio.create_task(safe_loop("auto_close", auto_close_stale_tickets)))
+    
+    await start_ticket_scheduler()
 
 
 async def stop_service():
+    await stop_ticket_scheduler()
     for t in list(background_tasks):
         t.cancel()
     if bot_app:
