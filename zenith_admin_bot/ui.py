@@ -137,9 +137,9 @@ def format_revenue_analytics(stats: dict) -> str:
         f"<b>⚠️ At Risk (7d):</b> {stats.get('expiring_within_7_days', 0):,}",
         "",
         "<b>💰 ESTIMATED MRR</b>",
-        f"<b>Active Subs × $9.99:</b> ${estimated_mrr:,.2f}",
+        f"<b>Active Subs × $150:</b> ${estimated_mrr:,.2f}",
         "",
-        "<i>Note: Based on $9.99/month base plan</i>",
+        "<i>Note: Based on $150/month base plan</i>",
     ]
     return "\n".join(lines)
 
